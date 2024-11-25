@@ -1,0 +1,9 @@
+[package]
+name = "democratic_pq_cle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+nalgebra = "0.33"
+num = "0.4"
