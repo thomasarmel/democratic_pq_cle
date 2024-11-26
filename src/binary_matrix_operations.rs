@@ -29,6 +29,19 @@ pub(crate) fn matrix_is_zero(matrix: &DMatrix<MyBool>) -> bool {
     true
 }
 
+#[allow(dead_code)]
+pub(crate) fn matrix_elements_sum(matrix: &DMatrix<MyBool>) -> usize {
+    let mut sum = 0;
+    for i in 0..matrix.nrows() {
+        for j in 0..matrix.ncols() {
+            if *matrix[(i, j)] {
+                sum += 1;
+            }
+        }
+    }
+    sum
+}
+
 pub(crate) fn make_identity_matrix(size: usize) -> DMatrix<MyBool> {
     let mut matrix = DMatrix::from_element(size, size, MyBool::from(false));
     for i in 0..size {

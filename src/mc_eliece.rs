@@ -1,10 +1,12 @@
 use nalgebra::DMatrix;
 use rand::Rng;
+use rand_chacha::ChaCha20Rng;
+use rand_core::SeedableRng;
 use crate::my_bool::MyBool;
 use crate::qc_mdpc::{QcMdpc, QcMdpcPrivateKey, QcMdpcPublicKey};
 
 fn get_error_vector(n: usize, error_count: usize) -> DMatrix<MyBool> {
-    let mut rng = rand::thread_rng();
+    let mut rng = ChaCha20Rng::from_entropy();
     let mut error_vector = DMatrix::from_element(1, n, MyBool::from(false));
     let mut weight = 0usize;
     while weight < error_count {
@@ -35,4 +37,23 @@ pub fn decrypt(private_key: &QcMdpcPrivateKey, data: &DMatrix<MyBool>) -> Result
     }
     let message = QcMdpc::decode_data(private_key, data)[..private_key.max_message_length()].to_vec();
     Ok(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::mc_eliece::{decrypt, encrypt};
+    use crate::qc_mdpc::QcMdpc;
+
+    #[test]
+    fn test_encrypt_decrypt() {
+        let code = QcMdpc::init(2, 400, 30, 10);
+        let message_str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX";
+        let message = message_str.as_bytes();
+        assert_eq!(message.len(), 50);
+        let public_key = code.get_public_key();
+        let private_key = code.get_private_key();
+        let encrypted = encrypt(&public_key, message).unwrap();
+        let decrypted = decrypt(&private_key, &encrypted).unwrap();
+        assert_eq!(std::str::from_utf8(&decrypted[0..message.len()]).unwrap(), message_str);
+    }
 }

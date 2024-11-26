@@ -3,7 +3,8 @@ use democratic_pq_cle::qc_mdpc::QcMdpc;
 
 fn main() {
     let code = QcMdpc::init(2, 400, 30, 10);
-    let message = "Hello, World!".as_bytes();
+    let message = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX".as_bytes();
+    println!("Message length: {}", message.len());
     let public_key = code.get_public_key();
     let private_key = code.get_private_key();
     let encrypted = encrypt(&public_key, message).unwrap();

@@ -1,6 +1,8 @@
 use std::cmp::{max, min};
 use nalgebra::DMatrix;
 use rand::Rng;
+use rand_chacha::ChaCha20Rng;
+use rand_core::SeedableRng;
 use crate::binary_matrix_operations::{concat_horizontally_mat, concat_vertically_mat, make_identity_matrix, matrix_is_zero, try_inverse_matrix};
 use crate::my_bool::MyBool;
 
@@ -55,7 +57,7 @@ impl QcMdpcPrivateKey {
 
 impl QcMdpc {
     pub fn init(n0: u32, p: u32, w: u32, t: u32) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = ChaCha20Rng::from_entropy();
 
         let mut code = Self {
             row: vec![MyBool::from(false); (n0 * p) as usize],
@@ -182,6 +184,8 @@ impl QcMdpc {
                     syn += H.view_range(0..H.nrows(), j..j + 1);
                 }
             }
+
+            //println!("Round {}: {} unsatisfied, sum of syn = {} (is zero = {})", _i, *unsatisfied.iter().max().unwrap() as i32, matrix_elements_sum(&syn), matrix_is_zero(&syn));
 
             if matrix_is_zero(&syn) {
                 let mut result = vec![0u8; encoded_data.ncols() << 3];
