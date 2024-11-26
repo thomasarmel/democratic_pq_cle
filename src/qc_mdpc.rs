@@ -73,6 +73,7 @@ impl QcMdpc {
         let mut parity_check_matrix_invertible = false;
 
         while !parity_check_matrix_invertible {
+            println!("Trying to generate parity check matrix");
             loop {
                 let mut flag = 0u32;
                 while flag < w {
@@ -85,16 +86,19 @@ impl QcMdpc {
                 if code.get_row_weight(code.k, code.n - 1) % 2 == 1 {
                     break;
                 }
+                //println!("Row weight is even, retrying");
                 code.row.iter_mut().for_each(|x| *x = MyBool::from(false));
             }
             let p_usize = code.p as usize;
             let circ = make_circulant_matrix(&code.row[((code.n0 as usize - 1) * p_usize)..code.n as usize], p_usize, p_usize, 1);
+            //println!("Trying to invert parity check matrix");
             if try_inverse_matrix(&circ).is_some() {
                 parity_check_matrix_invertible = true;
             } else {
                 code.row.iter_mut().for_each(|x| *x = MyBool::from(false));
             }
         }
+        //println!("Parity check matrix generated");
 
         code
     }
@@ -162,7 +166,7 @@ impl QcMdpc {
     }
 
     #[allow(non_snake_case)]
-    pub(crate) fn decode_data(private_key: &QcMdpcPrivateKey, encoded_data: &DMatrix<MyBool>) -> Vec<u8> {
+    pub(crate) fn decode_data(private_key: &QcMdpcPrivateKey, encoded_data: &DMatrix<MyBool>) -> Result<Vec<u8>, &'static str> {
         let mut encoded_data = encoded_data.clone();
         let H = private_key.parity_check_matrix.clone();
         let mut syn = H.clone() * encoded_data.transpose();
@@ -192,10 +196,10 @@ impl QcMdpc {
                 for col in 0..encoded_data.ncols() {
                     result[col >> 3] |= (**encoded_data.get((0, col)).unwrap() as u8) << (col & 7);
                 }
-                return result;
+                return Ok(result);
             }
         }
-        unreachable!("Decoding failed")
+        Err("Decoding failed")
     }
 }
 
@@ -246,7 +250,7 @@ mod tests {
         let public_key = code.get_public_key();
         let private_key = code.get_private_key();
         let encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
-        let decoded = super::QcMdpc::decode_data(&private_key, &encoded);
+        let decoded = super::QcMdpc::decode_data(&private_key, &encoded).unwrap();
         assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 
@@ -257,7 +261,7 @@ mod tests {
         let private_key = code.get_private_key();
         let mut encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
-        let decoded = super::QcMdpc::decode_data(&private_key, &encoded);
+        let decoded = super::QcMdpc::decode_data(&private_key, &encoded).unwrap();
         assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 
@@ -269,7 +273,7 @@ mod tests {
         let mut encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
         **(encoded.get_mut((0, 1)).unwrap()) ^= true;
-        let decoded = super::QcMdpc::decode_data(&private_key, &encoded);
+        let decoded = super::QcMdpc::decode_data(&private_key, &encoded).unwrap();
         assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 }

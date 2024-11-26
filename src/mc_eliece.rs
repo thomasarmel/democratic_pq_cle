@@ -35,7 +35,7 @@ pub fn decrypt(private_key: &QcMdpcPrivateKey, data: &DMatrix<MyBool>) -> Result
     if data.ncols() != private_key.expected_encoded_vector_size() {
         return Err("Invalid data size");
     }
-    let message = QcMdpc::decode_data(private_key, data)[..private_key.max_message_length()].to_vec();
+    let message = QcMdpc::decode_data(private_key, data)?[..private_key.max_message_length()].to_vec();
     Ok(message)
 }
 
@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt() {
-        let code = QcMdpc::init(2, 400, 30, 10);
+        let code = QcMdpc::init(2, 401, 30, 10);
         let message_str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX";
         let message = message_str.as_bytes();
         assert_eq!(message.len(), 50);
