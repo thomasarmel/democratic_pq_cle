@@ -69,10 +69,8 @@ impl QcMdpc {
 
     #[allow(non_snake_case)]
     fn generator_matrix(&self) -> DMatrix<MyBool> {
-        //let H = self.parity_chack_matrix();
         let p_usize = self.p as usize;
         let circ = make_circulant_matrix(&self.row[((self.n0 as usize - 1) * p_usize)..self.n as usize], p_usize, p_usize, 1);
-        //println!("{}", circ);
         let H_inv = try_inverse_matrix(&circ).unwrap();
         let H_0 = make_circulant_matrix(&self.row[0..p_usize], p_usize, p_usize, 1);
         let mut Q = (H_inv.clone() * H_0).transpose();
@@ -154,7 +152,6 @@ fn make_circulant_matrix(row: &[MyBool], rows: usize, cols: usize, shift: usize)
 
 #[cfg(test)]
 mod tests {
-    use std::primitive;
     use nalgebra::DMatrix;
     use crate::qc_mdpc::MyBool;
 
@@ -183,27 +180,27 @@ mod tests {
     #[test]
     fn test_encode_decode_no_error() {
         let code = super::QcMdpc::init(2, 200, 30, 10);
-        let encoded = code.encode_data("coucou".as_bytes());
+        let encoded = code.encode_data("This is my message".as_bytes());
         let decoded = code.decode_data(&encoded);
-        assert_eq!(std::str::from_utf8(&decoded[0..6]).unwrap(), "coucou");
+        assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 
     #[test]
     fn test_encode_decode_on_error() {
         let code = super::QcMdpc::init(2, 200, 30, 10);
-        let mut encoded = code.encode_data("coucou".as_bytes());
+        let mut encoded = code.encode_data("This is my message".as_bytes());
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
         let decoded = code.decode_data(&encoded);
-        assert_eq!(std::str::from_utf8(&decoded[0..6]).unwrap(), "coucou");
+        assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 
     #[test]
     fn test_encode_decode_two_error() {
         let code = super::QcMdpc::init(2, 200, 30, 10);
-        let mut encoded = code.encode_data("coucou".as_bytes());
+        let mut encoded = code.encode_data("This is my message".as_bytes());
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
         **(encoded.get_mut((0, 1)).unwrap()) ^= true;
         let decoded = code.decode_data(&encoded);
-        assert_eq!(std::str::from_utf8(&decoded[0..6]).unwrap(), "coucou");
+        assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 }
