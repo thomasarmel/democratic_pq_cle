@@ -5,48 +5,113 @@ use crate::binary_matrix_operations::{concat_horizontally_mat, concat_vertically
 use crate::my_bool::MyBool;
 
 #[derive(Debug, Clone)]
-struct QcMdpc {
+pub struct QcMdpc {
     row: Vec<MyBool>, // 0 or 1
     n0: u32,
     p: u32,
-    w: u32,
+    //w: u32,
     t: u32,
     n: u32,
     k: u32,
-    r: u32,
+    //r: u32,
+}
+
+pub struct QcMdpcPublicKey {
+    k: u32,
+    t: u32,
+    n: u32,
+    generator_matrix: DMatrix<MyBool>,
+}
+
+impl QcMdpcPublicKey {
+    pub fn max_message_length(&self) -> usize {
+        self.k as usize
+    }
+
+    pub(crate) fn max_error_weight(&self) -> usize {
+        self.t as usize
+    }
+
+    pub(crate) fn encoded_vector_size(&self) -> usize {
+        self.n as usize
+    }
+}
+
+pub struct QcMdpcPrivateKey {
+    parity_check_matrix: DMatrix<MyBool>,
+    k: u32,
+    n: u32,
+}
+
+impl QcMdpcPrivateKey {
+    pub(crate) fn expected_encoded_vector_size(&self) -> usize {
+        self.n as usize
+    }
+
+    pub fn max_message_length(&self) -> usize {
+        self.k as usize
+    }
 }
 
 impl QcMdpc {
-    fn init(n0: u32, p: u32, w: u32, t: u32) -> Self {
+    pub fn init(n0: u32, p: u32, w: u32, t: u32) -> Self {
         let mut rng = rand::thread_rng();
 
         let mut code = Self {
             row: vec![MyBool::from(false); (n0 * p) as usize],
             n0,
             p,
-            w,
+            //w,
             t,
             n: n0 * p,
             k: (n0 - 1) * p,
-            r: p,
+            //r: p,
         };
 
-        loop {
-            let mut flag = 0u32;
-            while flag < w {
-                let idx = rng.gen_range(0..=(code.n - 1)) as usize;
-                if !*code.row[idx] {
-                    code.row[idx] = MyBool::from(true);
-                    flag += 1;
+        let mut parity_check_matrix_invertible = false;
+
+        while !parity_check_matrix_invertible {
+            loop {
+                let mut flag = 0u32;
+                while flag < w {
+                    let idx = rng.gen_range(0..=(code.n - 1)) as usize;
+                    if !*code.row[idx] {
+                        code.row[idx] = MyBool::from(true);
+                        flag += 1;
+                    }
                 }
+                if code.get_row_weight(code.k, code.n - 1) % 2 == 1 {
+                    break;
+                }
+                code.row.iter_mut().for_each(|x| *x = MyBool::from(false));
             }
-            if code.get_row_weight(code.k, code.n - 1) % 2 == 1 {
-                break;
+            let p_usize = code.p as usize;
+            let circ = make_circulant_matrix(&code.row[((code.n0 as usize - 1) * p_usize)..code.n as usize], p_usize, p_usize, 1);
+            if try_inverse_matrix(&circ).is_some() {
+                parity_check_matrix_invertible = true;
+            } else {
+                code.row.iter_mut().for_each(|x| *x = MyBool::from(false));
             }
-            code.row.iter_mut().for_each(|x| *x = MyBool::from(false));
         }
 
         code
+    }
+
+    pub fn get_public_key(&self) -> QcMdpcPublicKey {
+        QcMdpcPublicKey {
+            k: self.k,
+            t: self.t,
+            n: self.n,
+            generator_matrix: self.generator_matrix(),
+        }
+    }
+
+    pub fn get_private_key(&self) -> QcMdpcPrivateKey {
+        QcMdpcPrivateKey {
+            parity_check_matrix: self.parity_check_matrix(),
+            k: self.k,
+            n: self.n,
+        }
     }
 
     fn get_row_weight(&self, min_value_included: u32, max_value_included: u32) -> usize {
@@ -57,7 +122,7 @@ impl QcMdpc {
     }
 
     #[allow(non_snake_case)]
-    fn parity_chack_matrix(&self) -> DMatrix<MyBool> {
+    fn parity_check_matrix(&self) -> DMatrix<MyBool> {
         let p_size = self.p as usize;
         let mut H = make_circulant_matrix(&self.row[0..p_size], p_size, p_size, 1);
         for i in 1..self.n0 as usize {
@@ -85,19 +150,19 @@ impl QcMdpc {
     }
 
     #[allow(non_snake_case)]
-    fn encode_data(&self, data: &[u8]) -> DMatrix<MyBool> {
-        let mut message = DMatrix::from_element(1, self.k as usize, MyBool::from(false));
-        for i in 0..min(self.k as usize, data.len() << 3) {
+    pub(crate) fn encode_data(public_key: &QcMdpcPublicKey, data: &[u8]) -> DMatrix<MyBool> {
+        let mut message = DMatrix::from_element(1, public_key.k as usize, MyBool::from(false));
+        for i in 0..min(public_key.k as usize, data.len() << 3) { // wrong check
             message[(0, i)] = MyBool::from(data[i >> 3] & (1 << (i & 7)) != 0);
         }
-        let G = self.generator_matrix();
+        let G = public_key.generator_matrix.clone();
         message * G
     }
 
     #[allow(non_snake_case)]
-    fn decode_data(&self, encoded_data: &DMatrix<MyBool>) -> Vec<u8> {
+    pub(crate) fn decode_data(private_key: &QcMdpcPrivateKey, encoded_data: &DMatrix<MyBool>) -> Vec<u8> {
         let mut encoded_data = encoded_data.clone();
-        let H = self.parity_chack_matrix();
+        let H = private_key.parity_check_matrix.clone();
         let mut syn = H.clone() * encoded_data.transpose();
         let limit = 10usize;
         let delta = 5usize;
@@ -156,12 +221,6 @@ mod tests {
     use crate::qc_mdpc::MyBool;
 
     #[test]
-    fn test_init() {
-        let _code = super::QcMdpc::init(2, 4801, 90, 84);
-        //println!("{:?}", code);
-    }
-
-    #[test]
     fn test_make_circulant_matrix() {
         let row: Vec<MyBool> = [true, false, false, false, false, false, false, true, false, false].iter().map(|x| MyBool::from(*x)).collect();
         let matrix = super::make_circulant_matrix(&row, 7, 7, 1);
@@ -180,27 +239,33 @@ mod tests {
     #[test]
     fn test_encode_decode_no_error() {
         let code = super::QcMdpc::init(2, 200, 30, 10);
-        let encoded = code.encode_data("This is my message".as_bytes());
-        let decoded = code.decode_data(&encoded);
+        let public_key = code.get_public_key();
+        let private_key = code.get_private_key();
+        let encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
+        let decoded = super::QcMdpc::decode_data(&private_key, &encoded);
         assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 
     #[test]
     fn test_encode_decode_on_error() {
         let code = super::QcMdpc::init(2, 200, 30, 10);
-        let mut encoded = code.encode_data("This is my message".as_bytes());
+        let public_key = code.get_public_key();
+        let private_key = code.get_private_key();
+        let mut encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
-        let decoded = code.decode_data(&encoded);
+        let decoded = super::QcMdpc::decode_data(&private_key, &encoded);
         assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 
     #[test]
     fn test_encode_decode_two_error() {
         let code = super::QcMdpc::init(2, 200, 30, 10);
-        let mut encoded = code.encode_data("This is my message".as_bytes());
+        let public_key = code.get_public_key();
+        let private_key = code.get_private_key();
+        let mut encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
         **(encoded.get_mut((0, 1)).unwrap()) ^= true;
-        let decoded = code.decode_data(&encoded);
+        let decoded = super::QcMdpc::decode_data(&private_key, &encoded);
         assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
     }
 }
