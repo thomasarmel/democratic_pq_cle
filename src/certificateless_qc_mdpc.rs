@@ -251,7 +251,7 @@ fn generate_hash_id_vector_correct_weight(id: usize, k: usize, weight: usize) ->
     let mut h_i_1 = vec![MyBool::from(false); k];
     let mut current_weight = 0;
     for i in 0..k {
-        if h_id[i << 3] & (1 << (i & 7)) != 0 {
+        if h_id[i >> 3] & (1 << (i & 7)) != 0 {
             h_i_1[i] = MyBool::from(true);
             current_weight += 1;
         }
