@@ -127,6 +127,25 @@ pub(crate) fn concat_vertically_mat(original: &mut DMatrix<MyBool>, to_add: &DMa
     }
 }
 
+fn shifted_row(row: &[MyBool], shift: usize) -> Vec<MyBool> {
+    let row_len = row.len();
+    let mut new_row = vec![MyBool::from(false); row_len];
+    for i in 0..row_len {
+        new_row[(i + shift) % row_len] = row[i];
+    }
+    new_row
+}
+pub(crate) fn make_circulant_matrix(row: &[MyBool], rows: usize, cols: usize, shift: usize) -> DMatrix<MyBool> {
+    let mut matrix: DMatrix<MyBool> = DMatrix::from_element(rows, cols, MyBool::from(false));
+    for i in 0..rows {
+        let new_row = shifted_row(&row[0..cols], i * shift);
+        for j in 0..cols {
+            matrix[(i, j)] = new_row[j];
+        }
+    }
+    matrix
+}
+
 #[cfg(test)]
 mod tests {
     use nalgebra::DMatrix;
@@ -148,5 +167,21 @@ mod tests {
         ]);
         let inverse = super::try_inverse_matrix(&matrix).unwrap();
         assert_eq!(matrix, inverse);
+    }
+
+    #[test]
+    fn test_make_circulant_matrix() {
+        let row: Vec<MyBool> = [true, false, false, false, false, false, false, true, false, false].iter().map(|x| MyBool::from(*x)).collect();
+        let matrix = super::make_circulant_matrix(&row, 7, 7, 1);
+        let expected_generated_matrix = DMatrix::from_row_slice(7, 7, &[
+            true, false, false, false, false, false, false,
+            false, true, false, false, false, false, false,
+            false, false, true, false, false, false, false,
+            false, false, false, true, false, false, false,
+            false, false, false, false, true, false, false,
+            false, false, false, false, false, true, false,
+            false, false, false, false, false, false, true,
+        ].iter().map(|x| MyBool::from(*x)).collect::<Vec<MyBool>>());
+        assert_eq!(matrix, expected_generated_matrix);
     }
 }

@@ -3,7 +3,7 @@ use nalgebra::DMatrix;
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
-use crate::binary_matrix_operations::{concat_horizontally_mat, concat_vertically_mat, make_identity_matrix, matrix_is_zero, try_inverse_matrix};
+use crate::binary_matrix_operations::{concat_horizontally_mat, concat_vertically_mat, make_circulant_matrix, make_identity_matrix, matrix_is_zero, try_inverse_matrix};
 use crate::my_bool::MyBool;
 
 #[derive(Debug, Clone)]
@@ -73,7 +73,7 @@ impl QcMdpc {
         let mut parity_check_matrix_invertible = false;
 
         while !parity_check_matrix_invertible {
-            println!("Trying to generate parity check matrix");
+            //println!("Trying to generate parity check matrix");
             loop {
                 let mut flag = 0u32;
                 while flag < w {
@@ -204,46 +204,8 @@ impl QcMdpc {
 }
 
 
-fn shifted_row(row: &[MyBool], shift: usize) -> Vec<MyBool> {
-    let row_len = row.len();
-    let mut new_row = vec![MyBool::from(false); row_len];
-    for i in 0..row_len {
-        new_row[(i + shift) % row_len] = row[i];
-    }
-    new_row
-}
-fn make_circulant_matrix(row: &[MyBool], rows: usize, cols: usize, shift: usize) -> DMatrix<MyBool> {
-    let mut matrix: DMatrix<MyBool> = DMatrix::from_element(rows, cols, MyBool::from(false));
-    for i in 0..rows {
-        let new_row = shifted_row(&row[0..cols], i * shift);
-        for j in 0..cols {
-            matrix[(i, j)] = new_row[j];
-        }
-    }
-    matrix
-}
-
 #[cfg(test)]
 mod tests {
-    use nalgebra::DMatrix;
-    use crate::qc_mdpc::MyBool;
-
-    #[test]
-    fn test_make_circulant_matrix() {
-        let row: Vec<MyBool> = [true, false, false, false, false, false, false, true, false, false].iter().map(|x| MyBool::from(*x)).collect();
-        let matrix = super::make_circulant_matrix(&row, 7, 7, 1);
-        let expected_generated_matrix = DMatrix::from_row_slice(7, 7, &[
-            true, false, false, false, false, false, false,
-            false, true, false, false, false, false, false,
-            false, false, true, false, false, false, false,
-            false, false, false, true, false, false, false,
-            false, false, false, false, true, false, false,
-            false, false, false, false, false, true, false,
-            false, false, false, false, false, false, true,
-        ].iter().map(|x| MyBool::from(*x)).collect::<Vec<MyBool>>());
-        assert_eq!(matrix, expected_generated_matrix);
-    }
-
     #[test]
     fn test_encode_decode_no_error() {
         let code = super::QcMdpc::init(2, 200, 30, 10);
