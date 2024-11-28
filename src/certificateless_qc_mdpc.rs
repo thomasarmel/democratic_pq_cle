@@ -14,6 +14,7 @@ pub struct CertificatelessQcMdpc {
     p: usize,
     t: usize,
     n: usize,
+    w: usize,
     secret_vector: Vec<MyBool>,
     h_i_1: Vec<MyBool>,
     h_i_2: Vec<MyBool>,
@@ -28,7 +29,7 @@ impl CertificatelessQcMdpc {
 
         let h_i_1_weight = (w >> 1).nth_root(3);
         let h_i_2_weight = (w >> 1).nth_root(3);
-        let h_i_3_weight = w >> 1;
+        let h_i_3_weight = w >> 2;//w >> 1; // TODO still secure ???
         let h_i_1 = generate_hash_id_vector_correct_weight(id, p, h_i_1_weight);
         assert!(check_vector_leads_to_invertible_circulant_matrix(&h_i_1, p)); // What to do otherwise?
 
@@ -37,13 +38,17 @@ impl CertificatelessQcMdpc {
         let h_i_2 = generate_random_weight_vector_to_invertible_matrix(p, h_i_2_weight);
         //println!("h_i_2: {:?}", h_i_2);
 
-        let h_i_3 = generate_random_weight_vector(p, h_i_3_weight);
+        //println!("Generating h_i_3...");
+        let h_i_3 = generate_random_weight_vector_to_invertible_matrix(p, h_i_3_weight);
+        //println!("h_i_3: generated");
+        //let h_i_3 = generate_random_weight_vector(p, h_i_3_weight);
         //println!("h_i_3: {:?}", h_i_3);
 
         Self {
             p,
             t,
             n: p * N_0,
+            w,
             secret_vector: si.to_vec(),
             h_i_1,
             h_i_2,
@@ -93,6 +98,43 @@ impl CertificatelessQcMdpc {
         CertificatelessQcMdpcPrivateKey {
             parity_check_matrix,
             expected_encoded_vector_size: self.n,
+        }
+    }
+
+    #[allow(non_snake_case)]
+    pub fn accept_new_node(&self, new_node_id: usize) -> NewNodeAcceptanceSignature { // Returns Shamir's share
+        // Pour i nouveau noeud, j ancien noeud, le noeud j distribue A = (H_i_1 * H_j_2 * H_j_2), et B = (H_j_3^-1 * H_j_3^-1 * H_i_1).
+        // On suppose qu'il est difficile de retrouver H_j_2 à partir de (H_j_2 * H_j_2)
+        // -> Donc A * R_j * B = H_i_1 * R_j^-1 * H_i_1, qui permet de vérifier que j a bien "signé" Id_i
+
+        // Sinon autre idée: j génère matrice de "poison" P aléatoire inversible, j distribue A = (H_i_1 * H_j_2 * P_j * H_j_2), et B = (H_j_3^-1 * P_j^1 * H_j_3^-1 * H_i_1). -> H_j_2 et H_j_3^-1 vraiment utiles ??!!
+        // peut-on faire P_j une matrice circulante ???
+        // -> Donc A * R_j * B = H_i_1 * R_j^-1 * H_i_1, qui permet de vérifier que j a bien "signé" Id_i
+
+        let poison = generate_random_weight_vector_to_invertible_matrix(self.p, self.w >> 2);
+        println!("poison generated!");
+        let P = make_circulant_matrix(&poison, self.p, self.p, 1);
+        let P_inv = try_inverse_matrix(&P).unwrap();
+
+        let h_other_weight = (self.w >> 1).nth_root(3);
+        let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, self.p, h_other_weight);
+        let H_other_1 = make_circulant_matrix(&h_other_1, self.p, self.p, 1);
+        let H_i_2 = make_circulant_matrix(&self.h_i_2, self.p, self.p, 1);
+        //let H_i_2_inv = try_inverse_matrix(&H_i_2).unwrap();
+        let H_i_3 = make_circulant_matrix(&self.h_i_3, self.p, self.p, 1);
+        let H_i_3_inv = try_inverse_matrix(&H_i_3).unwrap();
+        let A = H_other_1.clone() * P * H_i_2;
+        let a = A.row(0).iter().cloned().collect::<Vec<MyBool>>();
+        assert_eq!(make_circulant_matrix(&a, self.p, self.p, 1), A); // TODO remove
+        let B = H_i_3_inv * P_inv * H_other_1;
+        let b = B.row(0).iter().cloned().collect::<Vec<MyBool>>();
+        assert_eq!(make_circulant_matrix(&b, self.p, self.p, 1), B); // TODO remove
+
+        NewNodeAcceptanceSignature {
+            a,
+            b,
+            matrices_size: self.p,
+            w: self.w,
         }
     }
 }
@@ -205,6 +247,34 @@ impl CertificatelessQcMdpcPrivateKey {
             }
         }
         Err("Decoding failed")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewNodeAcceptanceSignature {
+    a: Vec<MyBool>,
+    b: Vec<MyBool>,
+    matrices_size: usize,
+    w: usize,
+}
+
+impl NewNodeAcceptanceSignature {
+    #[allow(non_snake_case)]
+    pub fn is_valid(&self, signer_node_witness: &[MyBool], new_node_id: usize) -> bool {
+        if signer_node_witness.len() != self.matrices_size {
+            return false;
+        }
+
+        let A = make_circulant_matrix(&self.a, self.matrices_size, self.matrices_size, 1);
+        let B = make_circulant_matrix(&self.b, self.matrices_size, self.matrices_size, 1);
+        let R_i = make_circulant_matrix(signer_node_witness, self.matrices_size, self.matrices_size, 1);
+
+        let h_other_weight = (self.w >> 1).nth_root(3);
+        let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, self.matrices_size, h_other_weight);
+        let H_other_1 = make_circulant_matrix(&h_other_1, self.matrices_size, self.matrices_size, 1);
+        let H_other_1_square = H_other_1.clone() * H_other_1.clone();
+
+        A * R_i * B == H_other_1_square
     }
 }
 

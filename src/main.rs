@@ -4,6 +4,7 @@ use democratic_pq_cle::certificateless_qc_mdpc::{generate_random_weight_vector_t
 const P: usize = 401;
 const W: usize = 60;
 const T: usize = 6;
+const VOTES_THRESHOLD: f32 = 0.5;
 
 const MESSAGE: &'static str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX";
 const NODE_ID: usize = 1;
@@ -24,4 +25,7 @@ fn main() {
     let decrypted = private_key.decrypt(&encrypted).unwrap();
     //println!("Decrypted: {:?}", decrypted);
     println!("Decrypted data: {}", std::str::from_utf8(&decrypted[0..MESSAGE.len()]).unwrap());
+
+    let new_node_2_signature = code.accept_new_node(2);
+    println!("New node 2 signature valid: {}", new_node_2_signature.is_valid(&witness_vector, 2));
 }
