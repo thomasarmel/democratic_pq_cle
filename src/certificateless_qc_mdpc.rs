@@ -1,10 +1,12 @@
 use std::cmp::{max, min};
 use nalgebra::DMatrix;
 use num::integer::Roots;
+use num::{One, Zero};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
 use sha3::{Digest, Sha3_512};
+use shamir_secret_sharing::num_bigint::BigInt;
 use crate::binary_matrix_operations::{concat_horizontally_mat, make_circulant_matrix, make_identity_matrix, matrix_is_zero, try_inverse_matrix};
 use crate::my_bool::MyBool;
 use crate::N_0;
@@ -275,6 +277,17 @@ impl NewNodeAcceptanceSignature {
         let H_other_1_square = H_other_1.clone() * H_other_1.clone();
 
         A * R_i * B == H_other_1_square
+    }
+
+    pub fn to_shamir_share(&self, shamir_threshold: usize) -> (usize, BigInt) {
+        assert_eq!(self.a.len(), self.b.len());
+        let mut share_eval = BigInt::zero();
+        for i in 0..self.a.len() {
+            if *(self.a[i] + self.b[i]) {
+                share_eval |= BigInt::one() << i;
+            }
+        }
+        (shamir_threshold, share_eval)
     }
 }
 
