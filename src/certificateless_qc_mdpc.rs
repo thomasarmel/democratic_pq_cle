@@ -316,7 +316,7 @@ pub fn generate_random_weight_vector_to_invertible_matrix(size: usize, weight: u
     //println!("");
     //println!("{:?}", vector);
     while !check_vector_leads_to_invertible_circulant_matrix(&vector, size) {
-        //println!("Regenerating vector");
+        println!("Regenerating vector");
         vector = generate_random_weight_vector(size, weight);
         while vector[(size >> 1)..size].iter().filter(|b| ***b).count() % 2 == 0 {
             //println!("Regenerating vector bis");

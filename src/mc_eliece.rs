@@ -52,8 +52,9 @@ mod tests {
         assert_eq!(message.len(), 50);
         let public_key = code.get_public_key();
         let private_key = code.get_private_key();
-        let encrypted = encrypt(&public_key, message).unwrap();
-        let decrypted = decrypt(&private_key, &encrypted).unwrap();
+        let encrypted = encrypt(&public_key, message).unwrap(); // as the decryption is probabilist, it increases the chance to decrypt the message
+        let encrypted_bis = encrypt(&public_key, message).unwrap();
+        let decrypted = decrypt(&private_key, &encrypted).or(decrypt(&private_key, &encrypted_bis)).unwrap();
         assert_eq!(std::str::from_utf8(&decrypted[0..message.len()]).unwrap(), message_str);
     }
 }
