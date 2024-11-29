@@ -114,7 +114,7 @@ impl CertificatelessQcMdpc {
         // -> Donc A * R_j * B = H_i_1 * R_j^-1 * H_i_1, qui permet de vérifier que j a bien "signé" Id_i
 
         let poison = generate_random_weight_vector_to_invertible_matrix(self.p, self.w >> 2);
-        println!("poison generated!");
+        //println!("poison generated!");
         let P = make_circulant_matrix(&poison, self.p, self.p, 1);
         let P_inv = try_inverse_matrix(&P).unwrap();
 
