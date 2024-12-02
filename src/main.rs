@@ -30,8 +30,8 @@ fn main() {
     //println!("s_i: {:?}", s_i);
     let node_1 = CertificatelessQcMdpc::init(1, P, W, T, &s_i_node_1);
     nodes_currently_in_system_count += 1;
-    let (node_1_public_key, node_1_witness_vector) = node_1.public_key_and_witness_vector();
-    println!("Node 1: Public key verified: {}", node_1_public_key.check_is_valid(1, &s_i_node_1, &node_1_witness_vector, W));
+    let (node_1_public_key, node_1_witness) = node_1.public_key_and_witness();
+    println!("Node 1: Public key verified: {}", node_1_public_key.check_is_valid(1, &s_i_node_1, &node_1_witness, W));
     let node_1_private_key = node_1.private_key();
     //println!("Public key: {:?}", public_key);
     let encrypted = node_1_public_key.encrypt(MESSAGE.as_bytes());
@@ -46,7 +46,7 @@ fn main() {
 
     // The signature should be broadcast to all nodes, in order to allow all nodes to verify the new node initialization vector
     let new_node_2_signature_from_node_1 = node_1.accept_new_node(2);
-    println!("New node 2 signature valid from node 1: {}", new_node_2_signature_from_node_1.is_valid(&node_1_witness_vector, 2));
+    println!("New node 2 signature valid from node 1: {}", new_node_2_signature_from_node_1.is_valid(&node_1_witness, 2));
 
     let shamir_voting_threshold = ((nodes_currently_in_system_count as f32) * VOTES_THRESHOLD).ceil() as usize;
     println!("Accepting a new node... Voting threshold = {}", shamir_voting_threshold);
@@ -66,8 +66,8 @@ fn main() {
     //println!("s_i_node_2: {:?}", s_i_node_2);
     let node_2 = CertificatelessQcMdpc::init(2, P, W, T, &s_i_node_2);
     nodes_currently_in_system_count += 1;
-    let (node_2_public_key, node_2_witness_vector) = node_2.public_key_and_witness_vector();
-    println!("Node 2: Public key verified: {}", node_2_public_key.check_is_valid(2, &s_i_node_2, &node_2_witness_vector, W));
+    let (node_2_public_key, node_2_witness) = node_2.public_key_and_witness();
+    println!("Node 2: Public key verified: {}", node_2_public_key.check_is_valid(2, &s_i_node_2, &node_2_witness, W));
 
     let node_2_private_key = node_2.private_key();
     //println!("Public key: {:?}", public_key);
@@ -82,8 +82,8 @@ fn main() {
     // Node 1 and 2 accepts the new node 3
     let new_node_3_signature_from_node_1 = node_1.accept_new_node(3);
     let new_node_3_signature_from_node_2 = node_2.accept_new_node(3);
-    println!("New node 3 signature valid from node 1: {}", new_node_3_signature_from_node_1.is_valid(&node_1_witness_vector, 3));
-    println!("New node 3 signature valid from node 2: {}", new_node_3_signature_from_node_2.is_valid(&node_2_witness_vector, 3));
+    println!("New node 3 signature valid from node 1: {}", new_node_3_signature_from_node_1.is_valid(&node_1_witness, 3));
+    println!("New node 3 signature valid from node 2: {}", new_node_3_signature_from_node_2.is_valid(&node_2_witness, 3));
 
     let shamir_voting_threshold = ((nodes_currently_in_system_count as f32) * VOTES_THRESHOLD).ceil() as usize;
     println!("Accepting a new node... Voting threshold = {}", shamir_voting_threshold);
@@ -102,8 +102,8 @@ fn main() {
     }
     let node_3 = CertificatelessQcMdpc::init(3, P, W, T, &s_i_node_3);
     nodes_currently_in_system_count += 1;
-    let (node_3_public_key, node_3_witness_vector) = node_3.public_key_and_witness_vector();
-    println!("Node 3: Public key verified: {}", node_3_public_key.check_is_valid(3, &s_i_node_3, &node_3_witness_vector, W));
+    let (node_3_public_key, node_3_witness) = node_3.public_key_and_witness();
+    println!("Node 3: Public key verified: {}", node_3_public_key.check_is_valid(3, &s_i_node_3, &node_3_witness, W));
     let node_3_private_key = node_3.private_key();
     let encrypted = node_3_public_key.encrypt(MESSAGE.as_bytes());
     let encrypted_bis = node_3_public_key.encrypt(MESSAGE.as_bytes()); // as decryption is probabilist, it increases the chance to decrypt the message

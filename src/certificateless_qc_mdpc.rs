@@ -59,7 +59,7 @@ impl CertificatelessQcMdpc {
     }
 
     #[allow(non_snake_case)]
-    pub fn public_key_and_witness_vector(&self) -> (CertificatelessQcMdpcPublicKey, Vec<MyBool>) {
+    pub fn public_key_and_witness(&self) -> (CertificatelessQcMdpcPublicKey, NodeWitnessValues) {
         let H_i_1 = make_circulant_matrix(&self.h_i_1, self.p, self.p, 1);
         let H_i_2 = make_circulant_matrix(&self.h_i_2, self.p, self.p, 1);
         let H_i_3 = make_circulant_matrix(&self.h_i_3, self.p, self.p, 1);
@@ -67,10 +67,14 @@ impl CertificatelessQcMdpc {
         let S_i_inv = try_inverse_matrix(&S_i).unwrap();
         let H_i_1_inv = try_inverse_matrix(&H_i_1).unwrap();
         let H_i_2_inv = try_inverse_matrix(&H_i_2).unwrap();
+        let H_i_3_inv = try_inverse_matrix(&H_i_3).unwrap();
 
         let R_i = H_i_2_inv.clone() * H_i_3.clone();
         let r_i: Vec<MyBool> = R_i.row(0).iter().cloned().collect();
         assert_eq!(make_circulant_matrix(&r_i, self.p, self.p, 1), R_i); // todo not useful
+
+        let witness_signature_matrix = H_i_3_inv * H_i_2;
+        let witness_signature_vector = witness_signature_matrix.row(0).iter().cloned().collect::<Vec<MyBool>>();
 
         let right_part_generator = (S_i_inv * H_i_1_inv * H_i_2_inv * H_i_3).transpose();
 
@@ -82,7 +86,10 @@ impl CertificatelessQcMdpc {
             max_message_size_bits: self.p,
             errors_count: self.t,
         },
-        r_i)
+         NodeWitnessValues {
+             pubkey_witness_vector: r_i,
+             signature_witness_vector: witness_signature_vector,
+         })
     }
 
     #[allow(non_snake_case)]
@@ -142,6 +149,12 @@ impl CertificatelessQcMdpc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeWitnessValues {
+    pub pubkey_witness_vector: Vec<MyBool>,
+    pub signature_witness_vector: Vec<MyBool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CertificatelessQcMdpcPublicKey {
     generator_matrix: DMatrix<MyBool>,
     max_message_size_bits: usize,
@@ -162,9 +175,10 @@ impl CertificatelessQcMdpcPublicKey {
     }
 
     #[allow(non_snake_case)]
-    pub fn check_is_valid(&self, node_id: usize, s_i: &[MyBool], witness_vector: &[MyBool], weight: usize) -> bool {
+    pub fn check_is_valid(&self, node_id: usize, s_i: &[MyBool], witness: &NodeWitnessValues, weight: usize) -> bool {
+        let r_i: &[MyBool] = witness.pubkey_witness_vector.as_ref();
         if self.max_message_size_bits != s_i.len()
-        || self.max_message_size_bits != witness_vector.len() {
+        || self.max_message_size_bits != r_i.len() {
             return false;
         }
         let S_i = make_circulant_matrix(&s_i, self.max_message_size_bits, self.max_message_size_bits, 1);
@@ -180,7 +194,7 @@ impl CertificatelessQcMdpcPublicKey {
             Some(inverse_matrix) => inverse_matrix,
         };
 
-        let R_i = make_circulant_matrix(witness_vector, self.max_message_size_bits, self.max_message_size_bits, 1);
+        let R_i = make_circulant_matrix(r_i, self.max_message_size_bits, self.max_message_size_bits, 1);
 
         let G_i_verif_right_part = (S_i_inv * H_i_1_inv * R_i).transpose();
         let mut G_i_verif = make_identity_matrix(self.max_message_size_bits);
@@ -262,21 +276,24 @@ pub struct NewNodeAcceptanceSignature {
 
 impl NewNodeAcceptanceSignature {
     #[allow(non_snake_case)]
-    pub fn is_valid(&self, signer_node_witness: &[MyBool], new_node_id: usize) -> bool {
-        if signer_node_witness.len() != self.matrices_size {
+    pub fn is_valid(&self, signer_node_witness: &NodeWitnessValues, new_node_id: usize) -> bool {
+        let r_i = &signer_node_witness.pubkey_witness_vector;
+        if r_i.len() != self.matrices_size {
             return false;
         }
 
         let A = make_circulant_matrix(&self.a, self.matrices_size, self.matrices_size, 1);
         let B = make_circulant_matrix(&self.b, self.matrices_size, self.matrices_size, 1);
-        let R_i = make_circulant_matrix(signer_node_witness, self.matrices_size, self.matrices_size, 1);
+        let R_i = make_circulant_matrix(r_i, self.matrices_size, self.matrices_size, 1);
 
         let h_other_weight = (self.w >> 1).nth_root(3);
         let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, self.matrices_size, h_other_weight);
         let H_other_1 = make_circulant_matrix(&h_other_1, self.matrices_size, self.matrices_size, 1);
         let H_other_1_square = H_other_1.clone() * H_other_1.clone();
+        let H_other_1_square_inv = try_inverse_matrix(&H_other_1_square).unwrap();
+        let second_witness_matrix = make_circulant_matrix(&signer_node_witness.signature_witness_vector, self.matrices_size, self.matrices_size, 1);
 
-        A * R_i * B == H_other_1_square
+        (A.clone() * R_i * B.clone() == H_other_1_square) && (B * H_other_1_square_inv * A == second_witness_matrix)
     }
 
     pub fn to_shamir_share(&self, shamir_threshold: usize) -> (usize, BigInt) {
