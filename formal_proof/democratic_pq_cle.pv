@@ -1,0 +1,100 @@
+set traceDisplay = long.
+set attacker = active.
+set ignoreTypes = false.
+
+free broadcast_channel:channel.
+free broadcast_channel_to_attacker:channel.
+free node_2_1:channel.
+
+free secret_to_transmit:bitstring [private].
+
+type non_singular_matrix.
+
+type skey.
+type pkey.
+fun pk(skey): pkey.
+fun aenc(bitstring, pkey): bitstring.
+reduc forall m: bitstring, k: skey; adec(aenc(m, pk(k)), k) = m.
+
+type hsh.
+fun hash(nat): hsh.
+
+type key_init_vector. (* S_i *)
+type witness_vector. (* R_i *)
+fun witness_vector_to_bitstring(witness_vector): bitstring [data, typeConverter].
+fun non_singular_matrices_to_witness(non_singular_matrix, non_singular_matrix): witness_vector.
+fun get_witness_vector(skey): witness_vector.
+fun retrieve_pubkey_verif(key_init_vector, hsh, witness_vector): pkey.
+fun generate_private_key(non_singular_matrix, non_singular_matrix, hsh, key_init_vector): skey.
+equation forall m1: non_singular_matrix, m2: non_singular_matrix, h: hsh, s: key_init_vector; pk(generate_private_key(m1, m2, h, s)) = retrieve_pubkey_verif(s, h, non_singular_matrices_to_witness(m1, m2)).
+equation forall m1: non_singular_matrix, m2: non_singular_matrix, h: hsh, s: key_init_vector; get_witness_vector(generate_private_key(m1, m2, h, s)) = non_singular_matrices_to_witness(m1, m2).
+
+type new_node_acceptance_signature.
+fun generate_new_node_sig(hsh, non_singular_matrix, non_singular_matrix): new_node_acceptance_signature.
+reduc forall h:hsh, m1: non_singular_matrix, m2: non_singular_matrix; check_acceptance_sig(generate_new_node_sig(h, m1, m2), non_singular_matrices_to_witness(m1, m2)) = h.
+fun sig_to_key_init_vector(new_node_acceptance_signature): key_init_vector [data, typeConverter].
+
+(* Signature *)
+type sskey.
+type spkey.
+fun spk(sskey): spkey.
+fun sign(bitstring, sskey): bitstring.
+reduc forall m: bitstring, k: sskey; getmess(sign(m, k)) = m.
+reduc forall m: bitstring, k: sskey; checksign(sign(m, k), spk(k)) = m.
+reduc forall m: bitstring, k: sskey; get_signing_key(sign(m, k)) = spk(k).
+
+
+event node_signature_generated(nat, non_singular_matrix, non_singular_matrix).
+event public_key_broadcast(nat, new_node_acceptance_signature).
+query attacker(secret_to_transmit).
+query m1:non_singular_matrix, m2: non_singular_matrix, node_id: nat; event(public_key_broadcast(node_id, generate_new_node_sig(hash(node_id), m1, m2))) ==> event(node_signature_generated(node_id, m1, m2)).
+
+let node_1(node_id:nat, ssk:sskey, s_i_1:key_init_vector, node_2_psk:spkey) =
+    let hi_1 = hash(node_id) in
+    new hi_2:non_singular_matrix;
+    new hi_3:non_singular_matrix;
+    let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i_1) in
+    let r_i = non_singular_matrices_to_witness(hi_2, hi_3) in
+    out(broadcast_channel, (r_i, sign(witness_vector_to_bitstring(r_i), ssk)));
+    sync 1 [node1];
+    event node_signature_generated(2, hi_2, hi_3);
+    out(node_2_1, generate_new_node_sig(hash(2), hi_2, hi_3));
+    in(broadcast_channel, (node_2_pk:pkey, node2_acceptance_sig:new_node_acceptance_signature, node_2_si:key_init_vector, node_2_ri:witness_vector, node_2_ri_sign:bitstring));
+    let (=witness_vector_to_bitstring(node_2_ri)) = checksign(node_2_ri_sign, node_2_psk) in
+    let (=hash(2)) = check_acceptance_sig(node2_acceptance_sig, r_i) in
+    let (=node_2_si) = sig_to_key_init_vector(node2_acceptance_sig) in
+    let (=node_2_pk) = retrieve_pubkey_verif(node_2_si, hash(2), node_2_ri) in
+    out(node_2_1, aenc(secret_to_transmit, node_2_pk));
+    in(node_2_1, secret_enc:bitstring);
+    let (=secret_to_transmit) = adec(secret_enc, private_key) in
+    0.
+
+let node_2(node_id:nat, ssk:sskey, s_i_1:key_init_vector, node_1_psk:spkey) =
+    in(broadcast_channel, (witness_node_1:witness_vector, witness_node_1_sign:bitstring));
+    sync 1 [node2];
+    let (=witness_vector_to_bitstring(witness_node_1)) = checksign(witness_node_1_sign, node_1_psk) in
+    let hi_1 = hash(node_id) in
+    let node_1_pk = retrieve_pubkey_verif(s_i_1, hash(1), witness_node_1) in
+    in(node_2_1, node_acceptance_sig:new_node_acceptance_signature);
+    let (=hi_1) = check_acceptance_sig(node_acceptance_sig, witness_node_1) in
+    new hi_2:non_singular_matrix;
+    new hi_3:non_singular_matrix;
+    let s_i = sig_to_key_init_vector(node_acceptance_sig) in
+    let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i) in
+    let r_i = get_witness_vector(private_key) in
+    out(broadcast_channel, (pk(private_key), node_acceptance_sig, s_i, r_i, sign(witness_vector_to_bitstring(r_i), ssk)));
+    event public_key_broadcast(2, node_acceptance_sig);
+    in(node_2_1, secret_enc:bitstring);
+    let (=secret_to_transmit) = adec(secret_enc, private_key) in
+    out(node_2_1, aenc(secret_to_transmit, node_1_pk));
+    (* out(node_2_1, secret_to_transmit); *)
+    0.
+
+process
+    new node_1_ssk:sskey; (* signature are here in order to "emulate" id-based encryption, as we assume witness vector cannot be modified *)
+    let node_1_psk = spk(node_1_ssk) in
+    new node_2_ssk:sskey;
+    let node_2_psk = spk(node_2_ssk) in
+    new s_i_1:key_init_vector; (* Init vector of node 1 *)
+    out(broadcast_channel_to_attacker, s_i_1); (* The init vector is broadcasted *)
+    node_1(1, node_1_ssk, s_i_1, node_2_psk) | node_2(2, node_2_ssk, s_i_1, node_1_psk)
