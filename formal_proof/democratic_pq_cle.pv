@@ -3,7 +3,7 @@ set attacker = active.
 set ignoreTypes = false.
 
 free broadcast_channel:channel.
-free broadcast_channel_to_attacker:channel.
+free broadcast_channel_to_attacker:channel. (* This channel is not needed for the protocol, it is used to indicate that the attacker has an information *)
 free node_2_1:channel.
 free node_1_3:channel.
 free node_2_3:channel.
@@ -12,6 +12,7 @@ free secret_to_transmit:bitstring [private].
 
 type non_singular_matrix.
 
+(* Just normal asymmetric cryptography *)
 type skey.
 type pkey.
 fun pk(skey): pkey.
@@ -19,18 +20,19 @@ fun aenc(bitstring, pkey): bitstring.
 reduc forall m: bitstring, k: skey; adec(aenc(m, pk(k)), k) = m.
 
 type hsh.
-fun hash(nat): hsh.
+fun hash(nat): hsh. (* Hi,1 is retrieved by making a circulant matrix from hash(node_id) *)
 
 type key_init_vector. (* S_i *)
 type witness_vector. (* R_i *)
 fun witness_vector_to_bitstring(witness_vector): bitstring [data, typeConverter].
-fun non_singular_matrices_to_witness(non_singular_matrix, non_singular_matrix): witness_vector.
-fun get_witness_vector(skey): witness_vector.
-fun retrieve_pubkey_verif(key_init_vector, hsh, witness_vector): pkey.
-fun generate_private_key(non_singular_matrix, non_singular_matrix, hsh, key_init_vector): skey.
+fun non_singular_matrices_to_witness(non_singular_matrix, non_singular_matrix): witness_vector. (* Ri = Hi,2^-1 * Hi,3 *)
+fun get_witness_vector(skey): witness_vector. (* Retrieve Ri from sk *)
+fun retrieve_pubkey_verif(key_init_vector, hsh, witness_vector): pkey. (* pk = (Id | (Si^-1 * Hi,1^-1 * Hi,2^-1 * Hi,3)^T) = (Id | (Si^-1 * Hi,1^-1 * Ri)^T) *)
+fun generate_private_key(non_singular_matrix, non_singular_matrix, hsh, key_init_vector): skey. (* sk = (Hi,3 | Hi,2 * Hi,1 * Si ) *)
 equation forall m1: non_singular_matrix, m2: non_singular_matrix, h: hsh, s: key_init_vector; pk(generate_private_key(m1, m2, h, s)) = retrieve_pubkey_verif(s, h, non_singular_matrices_to_witness(m1, m2)).
 equation forall m1: non_singular_matrix, m2: non_singular_matrix, h: hsh, s: key_init_vector; get_witness_vector(generate_private_key(m1, m2, h, s)) = non_singular_matrices_to_witness(m1, m2).
 
+(* When there is only one node signature, it can be directly converted to init vector *)
 type new_node_acceptance_signature.
 fun generate_new_node_sig(hsh, non_singular_matrix, non_singular_matrix): new_node_acceptance_signature.
 reduc forall h:hsh, m1: non_singular_matrix, m2: non_singular_matrix; check_acceptance_sig(generate_new_node_sig(h, m1, m2), non_singular_matrices_to_witness(m1, m2)) = h.
@@ -45,6 +47,7 @@ reduc forall m: bitstring, k: sskey; getmess(sign(m, k)) = m.
 reduc forall m: bitstring, k: sskey; checksign(sign(m, k), spk(k)) = m.
 reduc forall m: bitstring, k: sskey; get_signing_key(sign(m, k)) = spk(k).
 
+(* There are 2 nodes acceptance signature, the key init vector is retrieved by Lagrangian interpolation *)
 type shares2_new_node_acceptance_signature.
 type shares2_part_1_new_node_acceptance_signature.
 type shares2_part_2_new_node_acceptance_signature.
@@ -55,6 +58,7 @@ reduc forall h:hsh, m1: non_singular_matrix, m2: non_singular_matrix; check_shar
 reduc forall h:hsh, m1: non_singular_matrix, m2: non_singular_matrix; check_share2_acceptance_sig_part_2(extract_shares2_part_2_new_node_acceptance_signature(generate_shares_2_new_node_sig(h, m1, m2)), non_singular_matrices_to_witness(m1, m2)) = h.
 fun shares2_sig_to_key_init_vector(shares2_part_1_new_node_acceptance_signature, shares2_part_2_new_node_acceptance_signature): key_init_vector [data].
 
+(* Store all signing public keys *)
 table sig_public_keys(nat, spkey).
 
 event node_signature_generated(nat, non_singular_matrix, non_singular_matrix).
@@ -80,105 +84,105 @@ query event(test_reachability(1)) && event(test_reachability(2)) && event(test_r
 
 let node_1(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
     let hi_1 = hash(node_id) in
-    new hi_2:non_singular_matrix;
+    new hi_2:non_singular_matrix; (* Generate secret matrices *)
     new hi_3:non_singular_matrix;
     let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i_1) in
-    let r_i = non_singular_matrices_to_witness(hi_2, hi_3) in
-    out(broadcast_channel, (r_i, sign(witness_vector_to_bitstring(r_i), ssk)));
+    let r_i = non_singular_matrices_to_witness(hi_2, hi_3) in (* Witness vector *)
+    out(broadcast_channel, (r_i, sign(witness_vector_to_bitstring(r_i), ssk))); (* Witness vector is broadcast, but need to be signed as certificateless encryption assumes that there is no MitM attack *)
     sync 1 [node1];
     event node_signature_generated(2, hi_2, hi_3);
-    out(node_2_1, generate_new_node_sig(hash(2), hi_2, hi_3));
-    in(broadcast_channel, (node_2_pk:pkey, node2_acceptance_sig:new_node_acceptance_signature, node_2_si:key_init_vector, node_2_ri:witness_vector, node_2_ri_sign:bitstring));
-    get sig_public_keys(=2, node_2_psk) in
+    out(node_2_1, generate_new_node_sig(hash(2), hi_2, hi_3)); (* Node 1 accepts node 2 to join the network *)
+    in(broadcast_channel, (node_2_pk:pkey, node2_acceptance_sig:new_node_acceptance_signature, node_2_si:key_init_vector, node_2_ri:witness_vector, node_2_ri_sign:bitstring)); (* Retrieve broadcast node 2 public key, the acceptance signature node 1 just generated, the associated key init vector and the witness vector. The witness vector needs to be signed, in order to emulate the fact that MitM attack cannot occur. *)
+    get sig_public_keys(=2, node_2_psk) in (* Retrieve all signin public keys *)
     get sig_public_keys(=3, node_3_psk) in
-    let (=witness_vector_to_bitstring(node_2_ri)) = checksign(node_2_ri_sign, node_2_psk) in
-    let (=hash(2)) = check_acceptance_sig(node2_acceptance_sig, r_i) in
-    let (=node_2_si) = sig_to_key_init_vector(node2_acceptance_sig) in
-    let (=node_2_pk) = retrieve_pubkey_verif(node_2_si, hash(2), node_2_ri) in
-    out(node_2_1, aenc(secret_to_transmit, node_2_pk));
-    in(node_2_1, secret_enc:bitstring);
-    sync 2 [node1];
+    let (=witness_vector_to_bitstring(node_2_ri)) = checksign(node_2_ri_sign, node_2_psk) in (* Check that witness vector has been correctly signed *)
+    let (=hash(2)) = check_acceptance_sig(node2_acceptance_sig, r_i) in (* Check that the given acceptance signature is the one that node 1 just generated *)
+    let (=node_2_si) = sig_to_key_init_vector(node2_acceptance_sig) in (* Check that the key init vector comes from node acceptance signature *)
+    let (=node_2_pk) = retrieve_pubkey_verif(node_2_si, hash(2), node_2_ri) in (* Check that the node 2 public key has been generated from the key init vector, hash of node 2 id and the witness vector *)
+    out(node_2_1, aenc(secret_to_transmit, node_2_pk)); (* Transmit secret to node 2 *)
+    in(node_2_1, secret_enc:bitstring); (* Receive secret from node 2 *)
     let (=secret_to_transmit) = adec(secret_enc, private_key) in
+    sync 2 [node1];
     event node_signature_generated_share2(1, 3, hi_2, hi_3);
-    out(node_1_3, extract_shares2_part_1_new_node_acceptance_signature(generate_shares_2_new_node_sig(hash(3), hi_2, hi_3)));
-    in(broadcast_channel, (node_3_pk:pkey, node3_acceptance_sig_node1:shares2_part_1_new_node_acceptance_signature, node3_acceptance_sig_node2:shares2_part_2_new_node_acceptance_signature, node_3_si:key_init_vector, node_3_ri:witness_vector, node_3_ri_sign:bitstring));
-    let (=witness_vector_to_bitstring(node_3_ri)) = checksign(node_3_ri_sign, node_3_psk) in
-    let (=hash(3)) = check_share2_acceptance_sig_part_1(node3_acceptance_sig_node1, r_i) in
-    let (=hash(3)) = check_share2_acceptance_sig_part_2(node3_acceptance_sig_node2, node_2_ri) in
-    let (=node_3_si) = shares2_sig_to_key_init_vector(node3_acceptance_sig_node1, node3_acceptance_sig_node2) in
-    let (=node_3_pk) = retrieve_pubkey_verif(node_3_si, hash(3), node_3_ri) in
-    out(node_1_3, aenc(secret_to_transmit, node_3_pk));
-    in(node_1_3, secret_enc:bitstring);
+    out(node_1_3, extract_shares2_part_1_new_node_acceptance_signature(generate_shares_2_new_node_sig(hash(3), hi_2, hi_3))); (* Accept node 3 to join, but now node 1 has only 50% of the voting threshold *)
+    in(broadcast_channel, (node_3_pk:pkey, node3_acceptance_sig_node1:shares2_part_1_new_node_acceptance_signature, node3_acceptance_sig_node2:shares2_part_2_new_node_acceptance_signature, node_3_si:key_init_vector, node_3_ri:witness_vector, node_3_ri_sign:bitstring)); (* Retrieve broadcast node 3 public key, the acceptance signature node 1 and 2 generated, the associated key init vector and the witness vector. The witness vector needs to be signed, in order to emulate the fact that MitM attack cannot occur. *)
+    let (=witness_vector_to_bitstring(node_3_ri)) = checksign(node_3_ri_sign, node_3_psk) in (* Check that witness vector has been correctly signed *)
+    let (=hash(3)) = check_share2_acceptance_sig_part_1(node3_acceptance_sig_node1, r_i) in (* Check that the given acceptance signature is the one that node 1 just generated *)
+    let (=hash(3)) = check_share2_acceptance_sig_part_2(node3_acceptance_sig_node2, node_2_ri) in (* Check that the given acceptance signature is the one that node 2 just generated *)
+    let (=node_3_si) = shares2_sig_to_key_init_vector(node3_acceptance_sig_node1, node3_acceptance_sig_node2) in (* Check that the key init vector comes from the 2 node acceptance signatures *)
+    let (=node_3_pk) = retrieve_pubkey_verif(node_3_si, hash(3), node_3_ri) in (* Check that the node 3 public key has been generated from the key init vector, hash of node 3 id and the witness vector *)
+    out(node_1_3, aenc(secret_to_transmit, node_3_pk)); (* Transmit secret to node 3 *)
+    in(node_1_3, secret_enc:bitstring); (* Receive secret from node 3 *)
     let (=secret_to_transmit) = adec(secret_enc, private_key) in
     event test_reachability(1);
     0.
 
 let node_2(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
-    in(broadcast_channel, (witness_node_1:witness_vector, witness_node_1_sign:bitstring));
+    in(broadcast_channel, (witness_node_1:witness_vector, witness_node_1_sign:bitstring)); (* Retrieve node 1 witness vector, which is signed in order to emulate the fact that MitM isn't possible *)
     sync 1 [node2];
-    get sig_public_keys(=1, node_1_psk) in
+    get sig_public_keys(=1, node_1_psk) in (* Retrieve all signin public keys *)
     get sig_public_keys(=3, node_3_psk) in
-    let (=witness_vector_to_bitstring(witness_node_1)) = checksign(witness_node_1_sign, node_1_psk) in
-    let hi_1 = hash(node_id) in
-    let node_1_pk = retrieve_pubkey_verif(s_i_1, hash(1), witness_node_1) in
-    in(node_2_1, node_acceptance_sig:new_node_acceptance_signature);
-    let (=hi_1) = check_acceptance_sig(node_acceptance_sig, witness_node_1) in
-    new hi_2:non_singular_matrix;
+    let (=witness_vector_to_bitstring(witness_node_1)) = checksign(witness_node_1_sign, node_1_psk) in (* Check node 1 witness vector signature *)
+    let hi_1 = hash(node_id) in (* Circulant hash matrix *)
+    let node_1_pk = retrieve_pubkey_verif(s_i_1, hash(1), witness_node_1) in (* Regenerate node 1 public key from key init vector, its id and its witness vector *)
+    in(node_2_1, node_acceptance_sig:new_node_acceptance_signature); (* Retrieve acceptance signature generated by node 1 *)
+    let (=hi_1) = check_acceptance_sig(node_acceptance_sig, witness_node_1) in (* Check that the acceptance signature is for node 2 *)
+    new hi_2:non_singular_matrix; (* Generate secret matrices *)
     new hi_3:non_singular_matrix;
-    let s_i = sig_to_key_init_vector(node_acceptance_sig) in
-    let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i) in
-    let r_i = get_witness_vector(private_key) in
-    out(broadcast_channel, (pk(private_key), node_acceptance_sig, s_i, r_i, sign(witness_vector_to_bitstring(r_i), ssk)));
+    let s_i = sig_to_key_init_vector(node_acceptance_sig) in (* Generate key init vector from acceptance signature *)
+    let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i) in (* Generate private key from secret matrices, hash of node id and key init vector *)
+    let r_i = get_witness_vector(private_key) in (* Witness vector *)
+    out(broadcast_channel, (pk(private_key), node_acceptance_sig, s_i, r_i, sign(witness_vector_to_bitstring(r_i), ssk))); (* Broadcast public key, acceptance signature generated by node 1, related key init vector, witness vector, and witness vector signature *)
     event public_key_broadcast(2, node_acceptance_sig);
-    in(node_2_1, secret_enc:bitstring);
+    in(node_2_1, secret_enc:bitstring); (* Receive encrypted secret from node 1 *)
     let (=secret_to_transmit) = adec(secret_enc, private_key) in
-    out(node_2_1, aenc(secret_to_transmit, node_1_pk));
+    out(node_2_1, aenc(secret_to_transmit, node_1_pk)); (* Transmit encrypted secret to node 1 *)
     sync 2 [node2];
     event node_signature_generated_share2(2, 3, hi_2, hi_3);
-    out(node_2_3, extract_shares2_part_2_new_node_acceptance_signature(generate_shares_2_new_node_sig(hash(3), hi_2, hi_3)));
-    in(broadcast_channel, (node_3_pk:pkey, node3_acceptance_sig_node1:shares2_part_1_new_node_acceptance_signature, node3_acceptance_sig_node2:shares2_part_2_new_node_acceptance_signature, node_3_si:key_init_vector, node_3_ri:witness_vector, node_3_ri_sign:bitstring));
-    let (=witness_vector_to_bitstring(node_3_ri)) = checksign(node_3_ri_sign, node_3_psk) in
-    let (=hash(3)) = check_share2_acceptance_sig_part_1(node3_acceptance_sig_node1, witness_node_1) in
-    let (=hash(3)) = check_share2_acceptance_sig_part_2(node3_acceptance_sig_node2, r_i) in
-    let (=node_3_si) = shares2_sig_to_key_init_vector(node3_acceptance_sig_node1, node3_acceptance_sig_node2) in
-    let (=node_3_pk) = retrieve_pubkey_verif(node_3_si, hash(3), node_3_ri) in
-    out(node_2_3, aenc(secret_to_transmit, node_3_pk));
-    in(node_2_3, secret_enc:bitstring);
+    out(node_2_3, extract_shares2_part_2_new_node_acceptance_signature(generate_shares_2_new_node_sig(hash(3), hi_2, hi_3))); (* Accept node 3 to join, but now node 2 has only 50% of the voting threshold *)
+    in(broadcast_channel, (node_3_pk:pkey, node3_acceptance_sig_node1:shares2_part_1_new_node_acceptance_signature, node3_acceptance_sig_node2:shares2_part_2_new_node_acceptance_signature, node_3_si:key_init_vector, node_3_ri:witness_vector, node_3_ri_sign:bitstring)); (* Retrieve broadcast node 3 public key, the acceptance signature node 1 and 2 generated, the associated key init vector and the witness vector. The witness vector needs to be signed, in order to emulate the fact that MitM attack cannot occur. *)
+    let (=witness_vector_to_bitstring(node_3_ri)) = checksign(node_3_ri_sign, node_3_psk) in (* Check that witness vector has been correctly signed *)
+    let (=hash(3)) = check_share2_acceptance_sig_part_1(node3_acceptance_sig_node1, witness_node_1) in (* Check that the given acceptance signature is the one that node 1 just generated *)
+    let (=hash(3)) = check_share2_acceptance_sig_part_2(node3_acceptance_sig_node2, r_i) in (* Check that the given acceptance signature is the one that node 2 just generated *)
+    let (=node_3_si) = shares2_sig_to_key_init_vector(node3_acceptance_sig_node1, node3_acceptance_sig_node2) in (* Check that the key init vector comes from the 2 node acceptance signatures *)
+    let (=node_3_pk) = retrieve_pubkey_verif(node_3_si, hash(3), node_3_ri) in (* Check that the node 3 public key has been generated from the key init vector, hash of node 3 id and the witness vector *)
+    out(node_2_3, aenc(secret_to_transmit, node_3_pk)); (* Transmit secret to node 3 *)
+    in(node_2_3, secret_enc:bitstring); (* Receive secret from node 3 *)
     let (=secret_to_transmit) = adec(secret_enc, private_key) in
     event test_reachability(2);
     0.
 
 let node_3(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
-    in(broadcast_channel, (witness_node_1:witness_vector, witness_node_1_sign:bitstring));
+    in(broadcast_channel, (witness_node_1:witness_vector, witness_node_1_sign:bitstring)); (* Retrieve node 1 witness vector, which is signed in order to emulate the fact that MitM isn't possible *)
     sync 1 [node3];
-    get sig_public_keys(=1, node_1_psk) in
+    get sig_public_keys(=1, node_1_psk) in (* Retrieve all signin public keys *)
     get sig_public_keys(=2, node_2_psk) in
-    let (=witness_vector_to_bitstring(witness_node_1)) = checksign(witness_node_1_sign, node_1_psk) in
-    let hi_1 = hash(node_id) in
-    let node_1_pk = retrieve_pubkey_verif(s_i_1, hash(1), witness_node_1) in
-    in(broadcast_channel, (node_2_pk:pkey, node2_acceptance_sig:new_node_acceptance_signature, node_2_si:key_init_vector, node_2_ri:witness_vector, node_2_ri_sign:bitstring));
-    let (=witness_vector_to_bitstring(node_2_ri)) = checksign(node_2_ri_sign, node_2_psk) in
-    let (=hash(2)) = check_acceptance_sig(node2_acceptance_sig, witness_node_1) in
-    let (=node_2_si) = sig_to_key_init_vector(node2_acceptance_sig) in
-    let (=node_2_pk) = retrieve_pubkey_verif(node_2_si, hash(2), node_2_ri) in
+    let (=witness_vector_to_bitstring(witness_node_1)) = checksign(witness_node_1_sign, node_1_psk) in (* Check node 1 witness vector signature *)
+    let hi_1 = hash(node_id) in (* Circulant hash matrix *)
+    let node_1_pk = retrieve_pubkey_verif(s_i_1, hash(1), witness_node_1) in (* Regenerate node 1 public key from key init vector, its id and its witness vector *)
+    in(broadcast_channel, (node_2_pk:pkey, node2_acceptance_sig:new_node_acceptance_signature, node_2_si:key_init_vector, node_2_ri:witness_vector, node_2_ri_sign:bitstring)); (* Retrieve broadcast node 2 public key, the acceptance signature node 1 generated, the associated key init vector and the witness vector. The witness vector needs to be signed, in order to emulate the fact that MitM attack cannot occur. *)
+    let (=witness_vector_to_bitstring(node_2_ri)) = checksign(node_2_ri_sign, node_2_psk) in (* Check that witness vector has been correctly signed *)
+    let (=hash(2)) = check_acceptance_sig(node2_acceptance_sig, witness_node_1) in (* Check that the given acceptance signature is the one that node 1 just generated *)
+    let (=node_2_si) = sig_to_key_init_vector(node2_acceptance_sig) in (* Check that the key init vector comes from node acceptance signature *)
+    let (=node_2_pk) = retrieve_pubkey_verif(node_2_si, hash(2), node_2_ri) in (* Check that the node 2 public key has been generated from the key init vector, hash of node 2 id and the witness vector *)
     sync 2 [node3];
-    in(node_1_3, node1_acceptance_sig:shares2_part_1_new_node_acceptance_signature);
+    in(node_1_3, node1_acceptance_sig:shares2_part_1_new_node_acceptance_signature); (* Receive acceptance signatures from nodes 1 and 2 *)
     in(node_2_3, node2_acceptance_sig:shares2_part_2_new_node_acceptance_signature);
-    let (=hi_1) = check_share2_acceptance_sig_part_1(node1_acceptance_sig, witness_node_1) in
-    let (=hi_1) = check_share2_acceptance_sig_part_2(node2_acceptance_sig, node_2_ri) in
-    new hi_2:non_singular_matrix;
+    let (=hi_1) = check_share2_acceptance_sig_part_1(node1_acceptance_sig, witness_node_1) in (* Check that the first acceptance signature is for node 2 *)
+    let (=hi_1) = check_share2_acceptance_sig_part_2(node2_acceptance_sig, node_2_ri) in (* Check that the second acceptance signature is for node 2 *)
+    new hi_2:non_singular_matrix; (* Generate secret matrices *)
     new hi_3:non_singular_matrix;
-    let s_i = shares2_sig_to_key_init_vector(node1_acceptance_sig, node2_acceptance_sig) in
-    let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i) in
-    let r_i = get_witness_vector(private_key) in
-    out(broadcast_channel, (pk(private_key), node1_acceptance_sig, node2_acceptance_sig, s_i, r_i, sign(witness_vector_to_bitstring(r_i), ssk)));
+    let s_i = shares2_sig_to_key_init_vector(node1_acceptance_sig, node2_acceptance_sig) in (* Generate key init vector from the two acceptance signatures *)
+    let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i) in (* Generate private key from secret matrices, hash of node id and key init vector *)
+    let r_i = get_witness_vector(private_key) in (* Witness vector *)
+    out(broadcast_channel, (pk(private_key), node1_acceptance_sig, node2_acceptance_sig, s_i, r_i, sign(witness_vector_to_bitstring(r_i), ssk))); (* Broadcast public key, acceptance signatures generated by node 1 and 2, related key init vector, witness vector, and witness vector signature *)
     event public_key_broadcast_share2(3, node1_acceptance_sig, node2_acceptance_sig);
-    in(node_1_3, secret_enc:bitstring);
+    in(node_1_3, secret_enc:bitstring); (* Receive encrypted secret from node 1 *)
     let (=secret_to_transmit) = adec(secret_enc, private_key) in
-    in(node_2_3, secret_enc:bitstring);
+    in(node_2_3, secret_enc:bitstring); (* Receive encrypted secret from node 2 *)
     let (=secret_to_transmit) = adec(secret_enc, private_key) in
-    out(node_1_3, aenc(secret_to_transmit, node_1_pk));
-    out(node_2_3, aenc(secret_to_transmit, node_2_pk));
+    out(node_1_3, aenc(secret_to_transmit, node_1_pk)); (* Transmit encrypted secret to node 1 *)
+    out(node_2_3, aenc(secret_to_transmit, node_2_pk)); (* Transmit encrypted secret to node 2 *)
     event test_reachability(3);
     0.
 
@@ -192,6 +196,6 @@ process
     new node_3_ssk:sskey;
     let node_3_psk = spk(node_3_ssk) in
     insert sig_public_keys(3, node_3_psk);
-    new s_i_1:key_init_vector; (* Init vector of node 1 *)
+    new s_i_1:key_init_vector; (* Init vector of node 1 is random, as its the first node to join the network. Otherwise we can assume it's a fixed value in the protocol specs *)
     out(broadcast_channel_to_attacker, s_i_1); (* The init vector is broadcasted *)
     node_1(1, node_1_ssk, s_i_1) | node_2(2, node_2_ssk, s_i_1) | node_3(3, node_3_ssk, s_i_1)
