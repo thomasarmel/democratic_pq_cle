@@ -1,5 +1,5 @@
 use num::Integer;
-use num::integer::binomial;
+use num::integer::{binomial, Roots};
 use num_primes::Generator;
 use shamir_secret_sharing::num_bigint::BigInt;
 use democratic_pq_cle::certificateless_qc_mdpc::{generate_random_weight_vector_to_invertible_matrix, CertificatelessQcMdpc};
@@ -15,10 +15,17 @@ const VOTES_THRESHOLD: f32 = 0.66;
 const MESSAGE: &'static str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX";
 
 fn main() {
+    /*let A = make_circulant_matrix(&generate_random_weight_vector(500, 15), 100, 100, 1);
+    let B = make_circulant_matrix(&generate_random_weight_vector(500, 15), 100, 100, 1);
+    let C = A * B;
+    let c: Vec<MyBool> = C.row(0).iter().cloned().collect();
+    println!("c: {:?}", c.iter().filter(|b| ***b).count());
+
+    return;*/
     let shamir_prime = BigInt::from(Generator::new_prime(P << 2));
 
     //let si_weight = max((W >> 1).nth_root(3), 10); // ???
-    let si_weight = 7;//(W >> 1).nth_root(3); // TODO il faudrait au moins 7 pour securité, 13 pour P = 4000
+    let si_weight = (W >> 1).nth_root(2);//7;//(W >> 1).nth_root(3); // TODO il faudrait au moins 7 pour securité, 13 pour P = 4000
 
     let binomial_coef_s_i_generation = binomial(BigInt::from(P), BigInt::from(si_weight));
 
@@ -57,7 +64,7 @@ fn main() {
     };
     //println!("{}", new_node_2_signature.to_shamir_share(1).1);
     //println!("{}", sss.recover(&[new_node_2_signature.to_shamir_share(1)]));
-    let s_node_2_combination_index = sss.recover(&[new_node_2_signature_from_node_1.to_shamir_share(shamir_voting_threshold)]).mod_floor(&binomial_coef_s_i_generation);
+    let s_node_2_combination_index = sss.recover(&[new_node_2_signature_from_node_1.to_shamir_share()]).mod_floor(&binomial_coef_s_i_generation);
     //println!("{}", s_node_2_combination_index);
     let mut s_i_node_2 = vec![MyBool::from(false); P];
     for index_to_flip in nth_combination(P, si_weight, s_node_2_combination_index.to_biguint().unwrap()) {
@@ -93,8 +100,8 @@ fn main() {
         prime: shamir_prime.clone(),
     };
     let s_node_3_combination_index = sss.recover(&[
-        new_node_3_signature_from_node_1.to_shamir_share(shamir_voting_threshold),
-        new_node_3_signature_from_node_2.to_shamir_share(shamir_voting_threshold),
+        new_node_3_signature_from_node_1.to_shamir_share(),
+        new_node_3_signature_from_node_2.to_shamir_share(),
     ]).mod_floor(&binomial_coef_s_i_generation);
     let mut s_i_node_3 = vec![MyBool::from(false); P];
     for index_to_flip in nth_combination(P, si_weight, s_node_3_combination_index.to_biguint().unwrap()) {

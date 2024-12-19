@@ -21,6 +21,7 @@ pub struct CertificatelessQcMdpc {
     h_i_1: Vec<MyBool>,
     h_i_2: Vec<MyBool>,
     h_i_3: Vec<MyBool>,
+    node_id: usize,
 }
 
 impl CertificatelessQcMdpc {
@@ -55,6 +56,7 @@ impl CertificatelessQcMdpc {
             h_i_1,
             h_i_2,
             h_i_3,
+            node_id: id,
         }
     }
 
@@ -144,6 +146,7 @@ impl CertificatelessQcMdpc {
             b,
             matrices_size: self.p,
             w: self.w,
+            signing_node_id: self.node_id,
         }
     }
 }
@@ -272,6 +275,7 @@ pub struct NewNodeAcceptanceSignature {
     b: Vec<MyBool>,
     matrices_size: usize,
     w: usize,
+    signing_node_id: usize,
 }
 
 impl NewNodeAcceptanceSignature {
@@ -296,7 +300,7 @@ impl NewNodeAcceptanceSignature {
         (A.clone() * R_i * B.clone() == H_other_1_square) && (B * H_other_1_square_inv * A == second_witness_matrix)
     }
 
-    pub fn to_shamir_share(&self, shamir_threshold: usize) -> (usize, BigInt) {
+    pub fn to_shamir_share(&self) -> (usize, BigInt) {
         assert_eq!(self.a.len(), self.b.len());
         let mut share_eval = BigInt::zero();
         for i in 0..self.a.len() {
@@ -304,7 +308,7 @@ impl NewNodeAcceptanceSignature {
                 share_eval |= BigInt::one() << i;
             }
         }
-        (shamir_threshold, share_eval)
+        (self.signing_node_id, share_eval)
     }
 }
 
