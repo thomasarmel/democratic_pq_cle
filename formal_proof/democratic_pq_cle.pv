@@ -1,6 +1,7 @@
 set traceDisplay = long.
 set attacker = active.
 set ignoreTypes = false.
+set preciseActions = true.
 
 free broadcast_channel:channel.
 free broadcast_channel_to_attacker:channel. (* This channel is not needed for the protocol, it is used to indicate that the attacker has an information *)
@@ -58,6 +59,12 @@ reduc forall h:hsh, m1: non_singular_matrix, m2: non_singular_matrix; check_shar
 reduc forall h:hsh, m1: non_singular_matrix, m2: non_singular_matrix; check_share2_acceptance_sig_part_2(extract_shares2_part_2_new_node_acceptance_signature(generate_shares_2_new_node_sig(h, m1, m2)), non_singular_matrices_to_witness(m1, m2)) = h.
 fun shares2_sig_to_key_init_vector(shares2_part_1_new_node_acceptance_signature, shares2_part_2_new_node_acceptance_signature): key_init_vector [data].
 
+type group_key.
+fun kdf(group_key, bitstring): group_key. (* Group key derivation from seed *)
+fun senc(group_key, bitstring): bitstring. (* Symmetric encryption *)
+reduc forall m:bitstring, gk: group_key; sdec(gk, senc(gk, m)) = m.
+fun group_key_to_bitstring(group_key): bitstring [data, typeConverter].
+
 (* Store all signing public keys *)
 table sig_public_keys(nat, spkey).
 
@@ -76,6 +83,7 @@ Uncomment to check reachability.
 If the test fails, the code is reachable.
 *)
 (*
+query event(test_reachability(0)).
 query event(test_reachability(1)).
 query event(test_reachability(2)).
 query event(test_reachability(3)).
@@ -89,6 +97,7 @@ let node_1(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
     let private_key = generate_private_key(hi_2, hi_3, hi_1, s_i_1) in
     let r_i = non_singular_matrices_to_witness(hi_2, hi_3) in (* Witness vector *)
     out(broadcast_channel, (r_i, sign(witness_vector_to_bitstring(r_i), ssk))); (* Witness vector is broadcast, but need to be signed as certificateless encryption assumes that there is no MitM attack *)
+    new g_k:group_key; (* Node 1 generates a group key, even if it's alone for now *)
     sync 1 [node1];
     event node_signature_generated(2, hi_2, hi_3);
     out(node_2_1, generate_new_node_sig(hash(2), hi_2, hi_3)); (* Node 1 accepts node 2 to join the network *)
@@ -99,10 +108,16 @@ let node_1(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
     let (=hash(2)) = check_acceptance_sig(node2_acceptance_sig, r_i) in (* Check that the given acceptance signature is the one that node 1 just generated *)
     let (=node_2_si) = sig_to_key_init_vector(node2_acceptance_sig) in (* Check that the key init vector comes from node acceptance signature *)
     let (=node_2_pk) = retrieve_pubkey_verif(node_2_si, hash(2), node_2_ri) in (* Check that the node 2 public key has been generated from the key init vector, hash of node 2 id and the witness vector *)
-    out(node_2_1, aenc(secret_to_transmit, node_2_pk)); (* Transmit secret to node 2 *)
-    in(node_2_1, secret_enc:bitstring); (* Receive secret from node 2 *)
-    let (=secret_to_transmit) = adec(secret_enc, private_key) in
+    in(node_2_1, seed_enc:bitstring); (* Receive group key seed from node 2 *)
+    let new_gk_seed = adec(seed_enc, private_key) in (* Retrieve new group key seed from node 2 *)
+    let g_k = kdf(g_k, new_gk_seed) in (* Derivate new group key from old key and seed *)
+    let new_g_k_enc = aenc(group_key_to_bitstring(g_k), node_2_pk) in (* Encrypt new group key using node 2 public key *)
+    out(node_2_1, (new_g_k_enc, sign(new_g_k_enc, ssk))); (* Send new group key to node 2 *)
+    in(node_2_1, secret_enc:bitstring); (* Receive secret encrypted using group key *)
+    let (=secret_to_transmit) = sdec(g_k, secret_enc) in (* Decrypt secret *) (* <=== HERE !!! *)
+
     sync 2 [node1];
+
     event node_signature_generated_share2(1, 3, hi_2, hi_3);
     out(node_1_3, extract_shares2_part_1_new_node_acceptance_signature(generate_shares_2_new_node_sig(hash(3), hi_2, hi_3))); (* Accept node 3 to join, but now node 1 has only 50% of the voting threshold *)
     in(broadcast_channel, (node_3_pk:pkey, node3_acceptance_sig_node1:shares2_part_1_new_node_acceptance_signature, node3_acceptance_sig_node2:shares2_part_2_new_node_acceptance_signature, node_3_si:key_init_vector, node_3_ri:witness_vector, node_3_ri_sign:bitstring)); (* Retrieve broadcast node 3 public key, the acceptance signature node 1 and 2 generated, the associated key init vector and the witness vector. The witness vector needs to be signed, in order to emulate the fact that MitM attack cannot occur. *)
@@ -111,9 +126,12 @@ let node_1(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
     let (=hash(3)) = check_share2_acceptance_sig_part_2(node3_acceptance_sig_node2, node_2_ri) in (* Check that the given acceptance signature is the one that node 2 just generated *)
     let (=node_3_si) = shares2_sig_to_key_init_vector(node3_acceptance_sig_node1, node3_acceptance_sig_node2) in (* Check that the key init vector comes from the 2 node acceptance signatures *)
     let (=node_3_pk) = retrieve_pubkey_verif(node_3_si, hash(3), node_3_ri) in (* Check that the node 3 public key has been generated from the key init vector, hash of node 3 id and the witness vector *)
-    out(node_1_3, aenc(secret_to_transmit, node_3_pk)); (* Transmit secret to node 3 *)
-    in(node_1_3, secret_enc:bitstring); (* Receive secret from node 3 *)
-    let (=secret_to_transmit) = adec(secret_enc, private_key) in
+
+    in(node_1_3, seed_enc:bitstring); (* Receive group key seed from node 3 *)
+    let new_gk_seed = adec(seed_enc, private_key) in (* Retrieve new group key seed from node 3 *)
+    let g_k = kdf(g_k, new_gk_seed) in (* Derivate new group key from old key and seed *)
+    let new_g_k_enc = aenc(group_key_to_bitstring(g_k), node_3_pk) in (* Encrypt new group key using node 3 public key *)
+    out(node_1_3, (new_g_k_enc, sign(new_g_k_enc, ssk))); (* Send new group key to node 3 *)
     event test_reachability(1);
     0.
 
@@ -134,10 +152,15 @@ let node_2(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
     let r_i = get_witness_vector(private_key) in (* Witness vector *)
     out(broadcast_channel, (pk(private_key), node_acceptance_sig, s_i, r_i, sign(witness_vector_to_bitstring(r_i), ssk))); (* Broadcast public key, acceptance signature generated by node 1, related key init vector, witness vector, and witness vector signature *)
     event public_key_broadcast(2, node_acceptance_sig);
-    in(node_2_1, secret_enc:bitstring); (* Receive encrypted secret from node 1 *)
-    let (=secret_to_transmit) = adec(secret_enc, private_key) in
-    out(node_2_1, aenc(secret_to_transmit, node_1_pk)); (* Transmit encrypted secret to node 1 *)
+    new gk_seed:bitstring; (* Generate seed to derivate the new group key *)
+    out(node_2_1, aenc(gk_seed, node_1_pk)); (* Transmit encrypted seed to node 1 *)
+    in(node_2_1, (g_k_enc:bitstring, g_k_enc_sign:bitstring)); (* Retrieve new encrypted group key from node 1 *)
+    let (=g_k_enc) = checksign(g_k_enc_sign, node_1_psk) in (* Check authenticity of received group key *)
+    let group_key_to_bitstring(g_k) = adec(g_k_enc, private_key) in (* Decrypt group key *)
+    out(node_2_1, senc(g_k, secret_to_transmit)); (* Send secret encrypted using group key *)
+
     sync 2 [node2];
+
     event node_signature_generated_share2(2, 3, hi_2, hi_3);
     out(node_2_3, extract_shares2_part_2_new_node_acceptance_signature(generate_shares_2_new_node_sig(hash(3), hi_2, hi_3))); (* Accept node 3 to join, but now node 2 has only 50% of the voting threshold *)
     in(broadcast_channel, (node_3_pk:pkey, node3_acceptance_sig_node1:shares2_part_1_new_node_acceptance_signature, node3_acceptance_sig_node2:shares2_part_2_new_node_acceptance_signature, node_3_si:key_init_vector, node_3_ri:witness_vector, node_3_ri_sign:bitstring)); (* Retrieve broadcast node 3 public key, the acceptance signature node 1 and 2 generated, the associated key init vector and the witness vector. The witness vector needs to be signed, in order to emulate the fact that MitM attack cannot occur. *)
@@ -146,9 +169,12 @@ let node_2(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
     let (=hash(3)) = check_share2_acceptance_sig_part_2(node3_acceptance_sig_node2, r_i) in (* Check that the given acceptance signature is the one that node 2 just generated *)
     let (=node_3_si) = shares2_sig_to_key_init_vector(node3_acceptance_sig_node1, node3_acceptance_sig_node2) in (* Check that the key init vector comes from the 2 node acceptance signatures *)
     let (=node_3_pk) = retrieve_pubkey_verif(node_3_si, hash(3), node_3_ri) in (* Check that the node 3 public key has been generated from the key init vector, hash of node 3 id and the witness vector *)
-    out(node_2_3, aenc(secret_to_transmit, node_3_pk)); (* Transmit secret to node 3 *)
-    in(node_2_3, secret_enc:bitstring); (* Receive secret from node 3 *)
-    let (=secret_to_transmit) = adec(secret_enc, private_key) in
+    in(node_2_3, seed_enc:bitstring); (* Receive group key seed from node 3 *)
+    let new_gk_seed = adec(seed_enc, private_key) in (* Retrieve new group key seed from node 3 *)
+    let g_k = kdf(g_k, new_gk_seed) in (* Derivate new group key from old key and seed *)
+    let new_g_k_enc = aenc(group_key_to_bitstring(g_k), node_3_pk) in (* Encrypt new group key using node 3 public key *)
+    out(node_2_3, (new_g_k_enc, sign(new_g_k_enc, ssk))); (* Send new group key to node 3 *)
+
     event test_reachability(2);
     0.
 
@@ -177,16 +203,22 @@ let node_3(node_id:nat, ssk:sskey, s_i_1:key_init_vector) =
     let r_i = get_witness_vector(private_key) in (* Witness vector *)
     out(broadcast_channel, (pk(private_key), node1_acceptance_sig, node2_acceptance_sig, s_i, r_i, sign(witness_vector_to_bitstring(r_i), ssk))); (* Broadcast public key, acceptance signatures generated by node 1 and 2, related key init vector, witness vector, and witness vector signature *)
     event public_key_broadcast_share2(3, node1_acceptance_sig, node2_acceptance_sig);
-    in(node_1_3, secret_enc:bitstring); (* Receive encrypted secret from node 1 *)
-    let (=secret_to_transmit) = adec(secret_enc, private_key) in
-    in(node_2_3, secret_enc:bitstring); (* Receive encrypted secret from node 2 *)
-    let (=secret_to_transmit) = adec(secret_enc, private_key) in
-    out(node_1_3, aenc(secret_to_transmit, node_1_pk)); (* Transmit encrypted secret to node 1 *)
-    out(node_2_3, aenc(secret_to_transmit, node_2_pk)); (* Transmit encrypted secret to node 2 *)
+    new gk_seed:bitstring; (* Generate seed to derivate the new group key *)
+    out(node_1_3, aenc(gk_seed, node_1_pk)); (* Transmit encrypted seed to node 1 *)
+    out(node_2_3, aenc(gk_seed, node_2_pk)); (* Transmit encrypted seed to node 2 *)
+    in(node_1_3, (g_k_enc:bitstring, g_k_enc_sign:bitstring)); (* Retrieve new encrypted group key from node 1 *)
+    let (=g_k_enc) = checksign(g_k_enc_sign, node_1_psk) in (* Check authenticity of received group key *)
+    let group_key_to_bitstring(g_k_from_node_1) = adec(g_k_enc, private_key) in (* Decrypt group key *)
+    in(node_2_3, (g_k_enc:bitstring, g_k_enc_sign:bitstring)); (* Retrieve new encrypted group key from node 1 *)
+    let (=g_k_enc) = checksign(g_k_enc_sign, node_2_psk) in (* Check authenticity of received group key *)
+    let group_key_to_bitstring(g_k) = adec(g_k_enc, private_key) in (* Decrypt group key *)
+    let (=g_k_from_node_1) = g_k in (* Both received group keys should be the same, however it means that a node is trying to counterfeit the group key *)
+    out(broadcast_channel_to_attacker, (g_k, gk_seed, private_key)); (* Oh oh, everything is leaked, so forward secrecy of secret must be ensured *)
     event test_reachability(3);
     0.
 
 process
+    event test_reachability(0);
     new node_1_ssk:sskey; (* signature are here in order to "emulate" id-based encryption, as we assume witness vector cannot be modified *)
     let node_1_psk = spk(node_1_ssk) in
     insert sig_public_keys(1, node_1_psk);
