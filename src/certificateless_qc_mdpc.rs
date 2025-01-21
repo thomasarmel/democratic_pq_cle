@@ -1,15 +1,19 @@
-use std::cmp::{max, min};
+use crate::binary_matrix_operations::{concat_horizontally_mat, make_circulant_matrix, make_identity_matrix, matrix_is_zero, try_inverse_matrix};
+use crate::math::nth_combination;
+use crate::my_bool::MyBool;
+use crate::N_0;
 use nalgebra::DMatrix;
-use num::integer::Roots;
+use num::integer::{binomial, Roots};
 use num::{One, Zero};
+use num_bigint::{BigInt, BigUint, RandBigInt};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
 use sha3::{Digest, Sha3_512};
-use shamir_secret_sharing::num_bigint::BigInt;
-use crate::binary_matrix_operations::{concat_horizontally_mat, make_circulant_matrix, make_identity_matrix, matrix_is_zero, try_inverse_matrix};
-use crate::my_bool::MyBool;
-use crate::N_0;
+use std::cmp::{max, min};
+
+const SIG_K: usize = 32;
+const SIGNATURE_WEIGHT_INTERVAL: [usize; 2] = [90, 110];
 
 #[derive(Debug, Clone)]
 pub struct CertificatelessQcMdpc {
@@ -22,6 +26,8 @@ pub struct CertificatelessQcMdpc {
     h_i_2: Vec<MyBool>,
     h_i_3: Vec<MyBool>,
     node_id: usize,
+    sig_sk_generator: DMatrix<MyBool>,
+    sig_j: Vec<usize>,
 }
 
 impl CertificatelessQcMdpc {
@@ -41,11 +47,21 @@ impl CertificatelessQcMdpc {
         let h_i_2 = generate_random_weight_vector_to_invertible_matrix(p, h_i_2_weight);
         //println!("h_i_2: {:?}", h_i_2);
 
-        //println!("Generating h_i_3...");
-        let h_i_3 = generate_random_weight_vector_to_invertible_matrix(p, h_i_3_weight);
         //println!("h_i_3: generated");
-        //let h_i_3 = generate_random_weight_vector(p, h_i_3_weight);
+        let h_i_3 = generate_random_weight_vector(p, h_i_3_weight);
         //println!("h_i_3: {:?}", h_i_3);
+
+        let sig_a = make_circulant_matrix(&generate_random_weight_vector(SIG_K, SIG_K >> 1), SIG_K, SIG_K, 1);
+        let mut sig_g = make_identity_matrix(SIG_K);
+        let n_prime = p >> 1;
+        let b = generate_random_weight_vector(n_prime - SIG_K, SIG_K);
+        let B = make_circulant_matrix(&b, SIG_K, n_prime - SIG_K, 1);
+        concat_horizontally_mat(&mut sig_g, &B);
+        let sig_sk_generator = sig_a * sig_g;
+
+        let mut rng = rand::thread_rng();
+        let j_comb_index = rng.gen_biguint_below(&binomial(BigUint::from(p), BigUint::from(n_prime)));
+        let j_comb = nth_combination(p, n_prime, j_comb_index);
 
         Self {
             p,
@@ -57,11 +73,13 @@ impl CertificatelessQcMdpc {
             h_i_2,
             h_i_3,
             node_id: id,
+            sig_sk_generator,
+            sig_j: j_comb,
         }
     }
 
     #[allow(non_snake_case)]
-    pub fn public_key_and_witness(&self) -> (CertificatelessQcMdpcPublicKey, NodeWitnessValues) {
+    pub fn public_key_and_witness(&self) -> (CertificatelessQcMdpcPublicKey, NodeWitnessSigPubKey) {
         let H_i_1 = make_circulant_matrix(&self.h_i_1, self.p, self.p, 1);
         let H_i_2 = make_circulant_matrix(&self.h_i_2, self.p, self.p, 1);
         let H_i_3 = make_circulant_matrix(&self.h_i_3, self.p, self.p, 1);
@@ -69,28 +87,38 @@ impl CertificatelessQcMdpc {
         let S_i_inv = try_inverse_matrix(&S_i).unwrap();
         let H_i_1_inv = try_inverse_matrix(&H_i_1).unwrap();
         let H_i_2_inv = try_inverse_matrix(&H_i_2).unwrap();
-        let H_i_3_inv = try_inverse_matrix(&H_i_3).unwrap();
 
         let R_i = H_i_2_inv.clone() * H_i_3.clone();
         let r_i: Vec<MyBool> = R_i.row(0).iter().cloned().collect();
         assert_eq!(make_circulant_matrix(&r_i, self.p, self.p, 1), R_i); // todo not useful
-
-        let witness_signature_matrix = H_i_3_inv * H_i_2;
-        let witness_signature_vector = witness_signature_matrix.row(0).iter().cloned().collect::<Vec<MyBool>>();
 
         let right_part_generator = (S_i_inv * H_i_1_inv * H_i_2_inv * H_i_3).transpose();
 
         let mut generator = make_identity_matrix(self.p);
         concat_horizontally_mat(&mut generator, &right_part_generator);
 
+        let n_prime = self.p >> 1;
+        let r = self.p >> 1;
+        let mut signature_parity_matrix = make_identity_matrix(r);
+        let R_i_truncated: DMatrix<MyBool> = R_i.columns(0, self.p - r).into();
+        let R_i_truncated: DMatrix<MyBool> = R_i_truncated.rows(0, r).into();
+        concat_horizontally_mat(&mut signature_parity_matrix, &R_i_truncated);
+
+        let mut signature_parity_matrix_truncated = DMatrix::from_element(r, n_prime, MyBool::from(false));
+        for col_num in 0..signature_parity_matrix_truncated.ncols() {
+            signature_parity_matrix_truncated.set_column(col_num, &signature_parity_matrix.column(self.sig_j[col_num]));
+        }
+        let signature_multiplication_matrix = signature_parity_matrix_truncated * self.sig_sk_generator.clone().transpose();
+
         (CertificatelessQcMdpcPublicKey {
             generator_matrix: generator,
             max_message_size_bits: self.p,
             errors_count: self.t,
         },
-         NodeWitnessValues {
+         NodeWitnessSigPubKey {
              pubkey_witness_vector: r_i,
-             signature_witness_vector: witness_signature_vector,
+             signature_parity_matrix: signature_parity_matrix,
+             signature_multiplication_matrix,
          })
     }
 
@@ -114,47 +142,33 @@ impl CertificatelessQcMdpc {
 
     #[allow(non_snake_case)]
     pub fn accept_new_node(&self, new_node_id: usize) -> NewNodeAcceptanceSignature { // Returns Shamir's share
-        // Pour i nouveau noeud, j ancien noeud, le noeud j distribue A = (H_i_1 * H_j_2 * H_j_2), et B = (H_j_3^-1 * H_j_3^-1 * H_i_1).
-        // On suppose qu'il est difficile de retrouver H_j_2 à partir de (H_j_2 * H_j_2)
-        // -> Donc A * R_j * B = H_i_1 * R_j^-1 * H_i_1, qui permet de vérifier que j a bien "signé" Id_i
-
-        // Sinon autre idée: j génère matrice de "poison" P aléatoire inversible, j distribue A = (H_i_1 * H_j_2 * P_j * H_j_2), et B = (H_j_3^-1 * P_j^1 * H_j_3^-1 * H_i_1). -> H_j_2 et H_j_3^-1 vraiment utiles ??!!
-        // peut-on faire P_j une matrice circulante ???
-        // -> Donc A * R_j * B = H_i_1 * R_j^-1 * H_i_1, qui permet de vérifier que j a bien "signé" Id_i
-
-        let poison = generate_random_weight_vector_to_invertible_matrix(self.p, self.w >> 2);
-        //println!("poison generated!");
-        let P = make_circulant_matrix(&poison, self.p, self.p, 1);
-        let P_inv = try_inverse_matrix(&P).unwrap();
-
-        let h_other_weight = (self.w >> 1).nth_root(3);
-        let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, self.p, h_other_weight);
-        let H_other_1 = make_circulant_matrix(&h_other_1, self.p, self.p, 1);
-        let H_i_2 = make_circulant_matrix(&self.h_i_2, self.p, self.p, 1);
-        //let H_i_2_inv = try_inverse_matrix(&H_i_2).unwrap();
-        let H_i_3 = make_circulant_matrix(&self.h_i_3, self.p, self.p, 1);
-        let H_i_3_inv = try_inverse_matrix(&H_i_3).unwrap();
-        let A = H_other_1.clone() * P * H_i_2;
-        let a = A.row(0).iter().cloned().collect::<Vec<MyBool>>();
-        assert_eq!(make_circulant_matrix(&a, self.p, self.p, 1), A); // TODO remove
-        let B = H_i_3_inv * P_inv * H_other_1;
-        let b = B.row(0).iter().cloned().collect::<Vec<MyBool>>();
-        assert_eq!(make_circulant_matrix(&b, self.p, self.p, 1), B); // TODO remove
+        let mut generator_star: DMatrix<MyBool> = DMatrix::from_element(SIG_K, self.p, MyBool::from(false));
+        for row in 0..generator_star.nrows() {
+            for col in 0..generator_star.ncols() {
+                let current_col_pos_in_sig_j = self.sig_j.iter().position(|&c| c == col);
+                match current_col_pos_in_sig_j {
+                    None => {}
+                    Some(col_pos) => {
+                        generator_star[(row, col)] = self.sig_sk_generator[(row, col_pos)]
+                    }
+                }
+            }
+        }
+        let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, SIG_K, SIG_K >> 1);
+        let H_other_1: DMatrix<MyBool> = DMatrix::from_column_slice(1, SIG_K, &h_other_1);
 
         NewNodeAcceptanceSignature {
-            a,
-            b,
-            matrices_size: self.p,
-            w: self.w,
+            signature: H_other_1 * generator_star,
             signing_node_id: self.node_id,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NodeWitnessValues {
+pub struct NodeWitnessSigPubKey {
     pub pubkey_witness_vector: Vec<MyBool>,
-    pub signature_witness_vector: Vec<MyBool>,
+    pub signature_parity_matrix: DMatrix<MyBool>,
+    pub signature_multiplication_matrix: DMatrix<MyBool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,7 +192,7 @@ impl CertificatelessQcMdpcPublicKey {
     }
 
     #[allow(non_snake_case)]
-    pub fn check_is_valid(&self, node_id: usize, s_i: &[MyBool], witness: &NodeWitnessValues, weight: usize) -> bool {
+    pub fn check_is_valid(&self, node_id: usize, s_i: &[MyBool], witness: &NodeWitnessSigPubKey, weight: usize) -> bool {
         let r_i: &[MyBool] = witness.pubkey_witness_vector.as_ref();
         if self.max_message_size_bits != s_i.len()
         || self.max_message_size_bits != r_i.len() {
@@ -236,6 +250,7 @@ impl CertificatelessQcMdpcPrivateKey {
         let mut encoded_data = data.clone();
         //let H = self.parity_check_matrix.clone();
         let mut syn = self.parity_check_matrix.clone() * encoded_data.transpose();
+        //println!("{} {} {} {}", data.nrows(), data.ncols(), syn.nrows(), syn.ncols());
         let limit = 10usize;
         let delta = 5usize;
         for _i in 0..limit {
@@ -267,45 +282,96 @@ impl CertificatelessQcMdpcPrivateKey {
         }
         Err("Decoding failed")
     }
+
+    pub fn decrypt_syndrome(&self, syndrome: &DMatrix<MyBool>) -> Result<Vec<bool>, &'static str> {
+        let ncols = syndrome.nrows() << 1;
+        if ncols != self.expected_encoded_vector_size {
+            return Err("Invalid data size");
+        }
+
+        let mut error = vec![false; ncols];
+        let mut syn = syndrome.clone();
+        let limit = 10usize;
+        let delta = 5usize;
+        for _i in 0..limit {
+            let mut unsatisfied = vec![0usize; ncols];
+            for j in 0..ncols {
+                for k in 0..self.parity_check_matrix.nrows() {
+                    if **self.parity_check_matrix.get((k, j)).unwrap() && **syn.get((k, 0)).unwrap() {
+                        unsatisfied[j] += 1;
+                    }
+                }
+            }
+            let b = (*unsatisfied.iter().max().unwrap()).abs_diff(delta);//max((*unsatisfied.iter().max().unwrap() as i32) - delta as i32, 0) as usize;
+            for j in 0..ncols {
+                if unsatisfied[j] > b {
+                    error[j] ^= true;
+                    syn += self.parity_check_matrix.view_range(0..self.parity_check_matrix.nrows(), j..j + 1);
+                }
+            }
+
+            //println!("Round {}: {} unsatisfied, sum of syn = {} (is zero = {})", _i, *unsatisfied.iter().max().unwrap() as i32, matrix_elements_sum(&syn), matrix_is_zero(&syn));
+
+            if matrix_is_zero(&syn) {
+                return Ok(error);
+            }
+        }
+        Err("Decoding failed")
+    }
+
+    pub fn weight(&self) -> usize {
+        self.parity_check_matrix.row(0).iter().filter(|b| ***b).count()
+    }
+
+    pub fn first_line(&self) -> Vec<MyBool> {
+        self.parity_check_matrix.row(0).iter().cloned().collect()
+    }
+}
+
+impl ToString for CertificatelessQcMdpcPrivateKey {
+    fn to_string(&self) -> String {
+        let mut s = String::new();
+        for i in 0..self.parity_check_matrix.nrows() {
+            for j in 0..self.parity_check_matrix.ncols() {
+                s.push(if **self.parity_check_matrix.get((i, j)).unwrap() { '1' } else { '0' });
+            }
+            s.push('\n');
+        }
+        s
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewNodeAcceptanceSignature {
-    a: Vec<MyBool>,
-    b: Vec<MyBool>,
-    matrices_size: usize,
-    w: usize,
     signing_node_id: usize,
+    signature: DMatrix<MyBool>
 }
 
 impl NewNodeAcceptanceSignature {
     #[allow(non_snake_case)]
-    pub fn is_valid(&self, signer_node_witness: &NodeWitnessValues, new_node_id: usize) -> bool {
-        let r_i = &signer_node_witness.pubkey_witness_vector;
-        if r_i.len() != self.matrices_size {
+    pub fn is_valid(&self, signer_node_witness: &NodeWitnessSigPubKey, new_node_id: usize) -> bool {
+        let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, SIG_K, SIG_K >> 1);
+        let H_other_1: DMatrix<MyBool> = DMatrix::from_column_slice(1, SIG_K, &h_other_1);
+
+        let signature_weight = self.signature.row(0).iter().filter(|x| ***x).count();
+
+        if signature_weight < SIGNATURE_WEIGHT_INTERVAL[0] || signature_weight > SIGNATURE_WEIGHT_INTERVAL[1] {
+            println!("Wrong signature weight: {}", signature_weight);
             return false;
         }
 
-        let A = make_circulant_matrix(&self.a, self.matrices_size, self.matrices_size, 1);
-        let B = make_circulant_matrix(&self.b, self.matrices_size, self.matrices_size, 1);
-        let R_i = make_circulant_matrix(r_i, self.matrices_size, self.matrices_size, 1);
-
-        let h_other_weight = (self.w >> 1).nth_root(3);
-        let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, self.matrices_size, h_other_weight);
-        let H_other_1 = make_circulant_matrix(&h_other_1, self.matrices_size, self.matrices_size, 1);
-        let H_other_1_square = H_other_1.clone() * H_other_1.clone();
-        let H_other_1_square_inv = try_inverse_matrix(&H_other_1_square).unwrap();
-        let second_witness_matrix = make_circulant_matrix(&signer_node_witness.signature_witness_vector, self.matrices_size, self.matrices_size, 1);
-
-        (A.clone() * R_i * B.clone() == H_other_1_square) && (B * H_other_1_square_inv * A == second_witness_matrix)
+        signer_node_witness.signature_multiplication_matrix.clone() * H_other_1.transpose() == signer_node_witness.signature_parity_matrix.clone() * self.signature.transpose()
     }
 
     pub fn to_shamir_share(&self) -> (usize, BigInt) {
-        assert_eq!(self.a.len(), self.b.len());
         let mut share_eval = BigInt::zero();
-        for i in 0..self.a.len() {
-            if *(self.a[i] + self.b[i]) {
-                share_eval |= BigInt::one() << i;
+        let mut pos_counter = 0usize;
+        for row in 0..self.signature.nrows() {
+            for col in 0..self.signature.ncols() {
+                if **self.signature.get((row, col)).unwrap() {
+                    share_eval += BigInt::one() << pos_counter;
+                }
+                pos_counter += 1;
             }
         }
         (self.signing_node_id, share_eval)

@@ -1,9 +1,9 @@
 use num::Integer;
 use num::integer::{binomial, Roots};
+use num_bigint::{BigInt, Sign};
 use num_primes::Generator;
-use shamir_secret_sharing::num_bigint::BigInt;
 use democratic_pq_cle::certificateless_qc_mdpc::{generate_random_weight_vector_to_invertible_matrix, CertificatelessQcMdpc};
-use shamir_secret_sharing::ShamirSecretSharing as SSS;
+use verifiable_secret_sharing::ShamirSecretSharing as SSS;
 use democratic_pq_cle::math::nth_combination;
 use democratic_pq_cle::my_bool::MyBool;
 
@@ -15,14 +15,7 @@ const VOTES_THRESHOLD: f32 = 0.66;
 const MESSAGE: &'static str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX";
 
 fn main() {
-    /*let A = make_circulant_matrix(&generate_random_weight_vector(500, 15), 100, 100, 1);
-    let B = make_circulant_matrix(&generate_random_weight_vector(500, 15), 100, 100, 1);
-    let C = A * B;
-    let c: Vec<MyBool> = C.row(0).iter().cloned().collect();
-    println!("c: {:?}", c.iter().filter(|b| ***b).count());
-
-    return;*/
-    let shamir_prime = BigInt::from(Generator::new_prime(P << 2));
+    let shamir_prime = BigInt::from_bytes_le(Sign::Plus, &Generator::new_prime(P << 2).to_bytes_le());
 
     //let si_weight = max((W >> 1).nth_root(3), 10); // ???
     let si_weight = (W >> 1).nth_root(2);//7;//(W >> 1).nth_root(3); // TODO il faudrait au moins 7 pour securité, 13 pour P = 4000
@@ -40,10 +33,17 @@ fn main() {
     let (node_1_public_key, node_1_witness) = node_1.public_key_and_witness();
     println!("Node 1: Public key verified: {}", node_1_public_key.check_is_valid(1, &s_i_node_1, &node_1_witness, W));
     let node_1_private_key = node_1.private_key();
-    //println!("Public key: {:?}", public_key);
+    //println!("{}", node_1_private_key.first_line().iter().map(|x| if **x { '1' } else { '0' }).collect::<String>());
+    //println!("{}", node_1_private_key.weight());
     let encrypted = node_1_public_key.encrypt(MESSAGE.as_bytes());
+    println!("Encrypted: {}", encrypted.iter().map(|x| if **x { '1' } else { '0' }).collect::<String>());
+    //std::fs::write("H.txt", node_1_private_key.to_string()).expect("Unable to write file");
+    //std::fs::write("enc.txt", encrypted.iter().map(|x| if **x { '1' } else { '0' }).collect::<String>()).expect("Unable to write file");
+    //println!("{} {}", encrypted.nrows(), encrypted.ncols());
     let encrypted_bis = node_1_public_key.encrypt(MESSAGE.as_bytes()); // as decryption is probabilist, it increases the chance to decrypt the message
+    //std::fs::write("enc2.txt", encrypted_bis.iter().map(|x| if **x { '1' } else { '0' }).collect::<String>()).expect("Unable to write file");
     //println!("Encrypted: {}", encrypted);
+    //return;
 
     let decrypted = node_1_private_key.decrypt(&encrypted).or(node_1_private_key.decrypt(&encrypted_bis)).unwrap();
     //println!("Decrypted: {:?}", decrypted);
@@ -54,6 +54,7 @@ fn main() {
     // The signature should be broadcast to all nodes, in order to allow all nodes to verify the new node initialization vector
     let new_node_2_signature_from_node_1 = node_1.accept_new_node(2);
     println!("New node 2 signature valid from node 1: {}", new_node_2_signature_from_node_1.is_valid(&node_1_witness, 2));
+    //return;
 
     let shamir_voting_threshold = ((nodes_currently_in_system_count as f32) * VOTES_THRESHOLD).ceil() as usize;
     println!("Accepting a new node... Voting threshold = {}", shamir_voting_threshold);

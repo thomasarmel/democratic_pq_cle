@@ -1,5 +1,5 @@
 use num::integer::binomial;
-use shamir_secret_sharing::num_bigint::BigUint;
+use num_bigint::BigUint;
 
 pub fn nth_combination(n: usize, k: usize, mut index: BigUint) -> Vec<usize> {
     if k > n {
@@ -27,7 +27,7 @@ pub fn nth_combination(n: usize, k: usize, mut index: BigUint) -> Vec<usize> {
 mod tests {
     use std::str::FromStr;
     use num::{One, Zero};
-    use shamir_secret_sharing::num_bigint::BigUint;
+    use num_bigint::BigUint;
 
     #[test]
     fn test_nth_combination() {
