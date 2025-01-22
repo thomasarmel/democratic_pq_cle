@@ -2,10 +2,11 @@ use num::Integer;
 use num::integer::{binomial, Roots};
 use num_bigint::{BigInt, Sign};
 use num_primes::Generator;
-use democratic_pq_cle::certificateless_qc_mdpc::{generate_random_weight_vector_to_invertible_matrix, CertificatelessQcMdpc};
+use democratic_pq_cle::certificateless_qc_mdpc::{CertificatelessQcMdpc};
 use verifiable_secret_sharing::ShamirSecretSharing as SSS;
 use democratic_pq_cle::math::nth_combination;
 use democratic_pq_cle::my_bool::MyBool;
+use democratic_pq_cle::utils::generate_random_weight_vector_to_invertible_matrix;
 
 const P: usize = 401;
 const W: usize = 100;

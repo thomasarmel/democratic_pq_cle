@@ -30,10 +30,12 @@ impl QcMdpcPublicKey {
         self.k as usize
     }
 
+    #[allow(dead_code)]
     pub(crate) fn max_error_weight(&self) -> usize {
         self.t as usize
     }
 
+    #[allow(dead_code)]
     pub(crate) fn encoded_vector_size(&self) -> usize {
         self.n as usize
     }
