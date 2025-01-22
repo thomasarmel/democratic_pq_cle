@@ -43,7 +43,7 @@ impl CertificatelessQcMdpc {
 
         let h_i_1_weight = (w >> 1).nth_root(3);
         let h_i_2_weight = (w >> 1).nth_root(3);
-        let h_i_3_weight = w >> 2;//w >> 1; // TODO still secure ???
+        let h_i_3_weight = w >> 1;
         let h_i_1 = generate_hash_id_vector_correct_weight(id, p, h_i_1_weight);
         assert!(check_vector_leads_to_invertible_circulant_matrix(&h_i_1, p)); // What to do otherwise?
 
