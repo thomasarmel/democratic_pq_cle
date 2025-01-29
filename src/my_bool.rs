@@ -1,6 +1,6 @@
+use num::{One, Zero};
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Deref, DerefMut, Mul, MulAssign};
-use num::{One, Zero};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MyBool(bool);

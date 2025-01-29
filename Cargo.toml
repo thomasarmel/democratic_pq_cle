@@ -13,3 +13,4 @@ sha3 = "0.10"
 verifiable_secret_sharing = {git = "https://github.com/thomasarmel/verifiable-secret-sharing.git"}
 num-primes = "0.3"
 num-bigint = { version = "0.4.6", features = ["rand"] }
+binary_polynomial_mod_algebra = "0.0.1"

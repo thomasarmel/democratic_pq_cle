@@ -1,13 +1,15 @@
+use crate::certificateless_qc_mdpc::{
+    generate_hash_id_vector_correct_weight, NodeWitnessSigPubKey, SIGNATURE_WEIGHT_INTERVAL, SIG_K,
+};
+use crate::my_bool::MyBool;
 use nalgebra::DMatrix;
 use num::{One, Zero};
 use num_bigint::BigInt;
-use crate::certificateless_qc_mdpc::{generate_hash_id_vector_correct_weight, NodeWitnessSigPubKey, SIGNATURE_WEIGHT_INTERVAL, SIG_K};
-use crate::my_bool::MyBool;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewNodeAcceptanceSignature {
     pub(super) signing_node_id: usize,
-    pub(super) signature: DMatrix<MyBool>
+    pub(super) signature: DMatrix<MyBool>,
 }
 
 impl NewNodeAcceptanceSignature {
@@ -18,12 +20,15 @@ impl NewNodeAcceptanceSignature {
 
         let signature_weight = self.signature.row(0).iter().filter(|x| ***x).count();
 
-        if signature_weight < SIGNATURE_WEIGHT_INTERVAL[0] || signature_weight > SIGNATURE_WEIGHT_INTERVAL[1] {
+        if signature_weight < SIGNATURE_WEIGHT_INTERVAL[0]
+            || signature_weight > SIGNATURE_WEIGHT_INTERVAL[1]
+        {
             println!("Wrong signature weight: {}", signature_weight);
             return false;
         }
 
-        signer_node_witness.signature_multiplication_matrix.clone() * H_other_1.transpose() == signer_node_witness.signature_parity_matrix.clone() * self.signature.transpose()
+        signer_node_witness.signature_multiplication_matrix.clone() * H_other_1.transpose()
+            == signer_node_witness.signature_parity_matrix.clone() * self.signature.transpose()
     }
 
     pub fn to_shamir_share(&self) -> (usize, BigInt) {

@@ -1,10 +1,13 @@
-use std::cmp::{max, min};
+use crate::binary_matrix_operations::{
+    concat_horizontally_mat, concat_vertically_mat, make_circulant_matrix, make_identity_matrix,
+    matrix_is_zero, try_inverse_matrix,
+};
+use crate::my_bool::MyBool;
 use nalgebra::DMatrix;
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
-use crate::binary_matrix_operations::{concat_horizontally_mat, concat_vertically_mat, make_circulant_matrix, make_identity_matrix, matrix_is_zero, try_inverse_matrix};
-use crate::my_bool::MyBool;
+use std::cmp::{max, min};
 
 #[derive(Debug, Clone)]
 pub struct QcMdpc {
@@ -92,7 +95,12 @@ impl QcMdpc {
                 code.row.iter_mut().for_each(|x| *x = MyBool::from(false));
             }
             let p_usize = code.p as usize;
-            let circ = make_circulant_matrix(&code.row[((code.n0 as usize - 1) * p_usize)..code.n as usize], p_usize, p_usize, 1);
+            let circ = make_circulant_matrix(
+                &code.row[((code.n0 as usize - 1) * p_usize)..code.n as usize],
+                p_usize,
+                p_usize,
+                1,
+            );
             //println!("Trying to invert parity check matrix");
             if try_inverse_matrix(&circ).is_some() {
                 parity_check_matrix_invertible = true;
@@ -134,7 +142,12 @@ impl QcMdpc {
         let p_size = self.p as usize;
         let mut H = make_circulant_matrix(&self.row[0..p_size], p_size, p_size, 1);
         for i in 1..self.n0 as usize {
-            let M = make_circulant_matrix(&self.row[(i * p_size)..((i+1) * p_size)], p_size, p_size, i);
+            let M = make_circulant_matrix(
+                &self.row[(i * p_size)..((i + 1) * p_size)],
+                p_size,
+                p_size,
+                i,
+            );
             concat_horizontally_mat(&mut H, &M);
         }
         H
@@ -143,12 +156,22 @@ impl QcMdpc {
     #[allow(non_snake_case)]
     fn generator_matrix(&self) -> DMatrix<MyBool> {
         let p_usize = self.p as usize;
-        let circ = make_circulant_matrix(&self.row[((self.n0 as usize - 1) * p_usize)..self.n as usize], p_usize, p_usize, 1);
+        let circ = make_circulant_matrix(
+            &self.row[((self.n0 as usize - 1) * p_usize)..self.n as usize],
+            p_usize,
+            p_usize,
+            1,
+        );
         let H_inv = try_inverse_matrix(&circ).unwrap();
         let H_0 = make_circulant_matrix(&self.row[0..p_usize], p_usize, p_usize, 1);
         let mut Q = (H_inv.clone() * H_0).transpose();
         for i in 1..(self.n0 - 1) as usize {
-            let M = make_circulant_matrix(&self.row[(i * p_usize)..((i + 1) * p_usize)], p_usize, p_usize, 1);
+            let M = make_circulant_matrix(
+                &self.row[(i * p_usize)..((i + 1) * p_usize)],
+                p_usize,
+                p_usize,
+                1,
+            );
             let M = (H_inv.clone() * M).transpose();
             concat_vertically_mat(&mut Q, &M);
         }
@@ -160,7 +183,8 @@ impl QcMdpc {
     #[allow(non_snake_case)]
     pub(crate) fn encode_data(public_key: &QcMdpcPublicKey, data: &[u8]) -> DMatrix<MyBool> {
         let mut message = DMatrix::from_element(1, public_key.k as usize, MyBool::from(false));
-        for i in 0..min(public_key.k as usize, data.len() << 3) { // wrong check
+        for i in 0..min(public_key.k as usize, data.len() << 3) {
+            // wrong check
             message[(0, i)] = MyBool::from(data[i >> 3] & (1 << (i & 7)) != 0);
         }
         let G = public_key.generator_matrix.clone();
@@ -168,7 +192,10 @@ impl QcMdpc {
     }
 
     #[allow(non_snake_case)]
-    pub(crate) fn decode_data(private_key: &QcMdpcPrivateKey, encoded_data: &DMatrix<MyBool>) -> Result<Vec<u8>, &'static str> {
+    pub(crate) fn decode_data(
+        private_key: &QcMdpcPrivateKey,
+        encoded_data: &DMatrix<MyBool>,
+    ) -> Result<Vec<u8>, &'static str> {
         let mut encoded_data = encoded_data.clone();
         let H = private_key.parity_check_matrix.clone();
         let mut syn = H.clone() * encoded_data.transpose();
@@ -183,7 +210,10 @@ impl QcMdpc {
                     }
                 }
             }
-            let b = max((*unsatisfied.iter().max().unwrap() as i32) - delta as i32, 0) as usize;
+            let b = max(
+                (*unsatisfied.iter().max().unwrap() as i32) - delta as i32,
+                0,
+            ) as usize;
             for j in 0..encoded_data.ncols() {
                 if unsatisfied[j] > b {
                     **(encoded_data.get_mut((0, j)).unwrap()) ^= true;
@@ -205,7 +235,6 @@ impl QcMdpc {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -215,7 +244,10 @@ mod tests {
         let private_key = code.get_private_key();
         let encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
         let decoded = super::QcMdpc::decode_data(&private_key, &encoded).unwrap();
-        assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
+        assert_eq!(
+            std::str::from_utf8(&decoded[0..18]).unwrap(),
+            "This is my message"
+        );
     }
 
     #[test]
@@ -226,7 +258,10 @@ mod tests {
         let mut encoded = super::QcMdpc::encode_data(&public_key, "This is my message".as_bytes());
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
         let decoded = super::QcMdpc::decode_data(&private_key, &encoded).unwrap();
-        assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
+        assert_eq!(
+            std::str::from_utf8(&decoded[0..18]).unwrap(),
+            "This is my message"
+        );
     }
 
     #[test]
@@ -238,6 +273,9 @@ mod tests {
         **(encoded.get_mut((0, 0)).unwrap()) ^= true;
         **(encoded.get_mut((0, 1)).unwrap()) ^= true;
         let decoded = super::QcMdpc::decode_data(&private_key, &encoded).unwrap();
-        assert_eq!(std::str::from_utf8(&decoded[0..18]).unwrap(), "This is my message");
+        assert_eq!(
+            std::str::from_utf8(&decoded[0..18]).unwrap(),
+            "This is my message"
+        );
     }
 }

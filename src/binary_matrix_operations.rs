@@ -1,5 +1,5 @@
-use nalgebra::DMatrix;
 use crate::my_bool::MyBool;
+use nalgebra::DMatrix;
 
 fn matrix_is_identity(matrix: &DMatrix<MyBool>) -> bool {
     if matrix.nrows() != matrix.ncols() {
@@ -56,7 +56,7 @@ pub(crate) fn try_inverse_matrix(matrix: &DMatrix<MyBool>) -> Option<DMatrix<MyB
     }
     let n = matrix.nrows();
     if matrix_is_identity(matrix) {
-        return Some(matrix.clone())
+        return Some(matrix.clone());
     }
 
     let mut augmented = DMatrix::from_fn(n, 2 * n, |r, c| {
@@ -135,7 +135,12 @@ fn shifted_row(row: &[MyBool], shift: usize) -> Vec<MyBool> {
     }
     new_row
 }
-pub(crate) fn make_circulant_matrix(row: &[MyBool], rows: usize, cols: usize, shift: usize) -> DMatrix<MyBool> {
+pub(crate) fn make_circulant_matrix(
+    row: &[MyBool],
+    rows: usize,
+    cols: usize,
+    shift: usize,
+) -> DMatrix<MyBool> {
     let mut matrix: DMatrix<MyBool> = DMatrix::from_element(rows, cols, MyBool::from(false));
     for i in 0..rows {
         let new_row = shifted_row(&row[0..cols], i * shift);
@@ -148,32 +153,64 @@ pub(crate) fn make_circulant_matrix(row: &[MyBool], rows: usize, cols: usize, sh
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::DMatrix;
     use crate::my_bool::MyBool;
+    use nalgebra::DMatrix;
 
     #[test]
     fn test_try_inverse_matrix() {
-        let matrix = DMatrix::from_row_slice(3, 3, &[
-            MyBool::from(true), MyBool::from(false), MyBool::from(false),
-            MyBool::from(false), MyBool::from(true), MyBool::from(false),
-            MyBool::from(false), MyBool::from(false), MyBool::from(true),
-        ]);
+        let matrix = DMatrix::from_row_slice(
+            3,
+            3,
+            &[
+                MyBool::from(true),
+                MyBool::from(false),
+                MyBool::from(false),
+                MyBool::from(false),
+                MyBool::from(true),
+                MyBool::from(false),
+                MyBool::from(false),
+                MyBool::from(false),
+                MyBool::from(true),
+            ],
+        );
         let inverse = super::try_inverse_matrix(&matrix).unwrap();
         assert_eq!(matrix, inverse);
 
-        let matrix = DMatrix::from_row_slice(2, 2, &[
-            MyBool::from(false), MyBool::from(true),
-            MyBool::from(true), MyBool::from(false),
-        ]);
+        let matrix = DMatrix::from_row_slice(
+            2,
+            2,
+            &[
+                MyBool::from(false),
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(false),
+            ],
+        );
         let inverse = super::try_inverse_matrix(&matrix).unwrap();
         assert_eq!(matrix, inverse);
 
-        let matrix = DMatrix::from_row_slice(4, 4, &[
-            MyBool::from(true), MyBool::from(true), MyBool::from(false), MyBool::from(true),
-            MyBool::from(true), MyBool::from(true), MyBool::from(true), MyBool::from(false),
-            MyBool::from(false), MyBool::from(true), MyBool::from(true), MyBool::from(true),
-            MyBool::from(true), MyBool::from(false), MyBool::from(true), MyBool::from(true),
-        ]);
+        let matrix = DMatrix::from_row_slice(
+            4,
+            4,
+            &[
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(false),
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(false),
+                MyBool::from(false),
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(true),
+                MyBool::from(false),
+                MyBool::from(true),
+                MyBool::from(true),
+            ],
+        );
         let inverse = super::try_inverse_matrix(&matrix).unwrap();
         assert_eq!(matrix, inverse);
         println!("{:?}", inverse);
@@ -181,17 +218,27 @@ mod tests {
 
     #[test]
     fn test_make_circulant_matrix() {
-        let row: Vec<MyBool> = [true, false, false, false, false, false, false, true, false, false].iter().map(|x| MyBool::from(*x)).collect();
+        let row: Vec<MyBool> = [
+            true, false, false, false, false, false, false, true, false, false,
+        ]
+        .iter()
+        .map(|x| MyBool::from(*x))
+        .collect();
         let matrix = super::make_circulant_matrix(&row, 7, 7, 1);
-        let expected_generated_matrix = DMatrix::from_row_slice(7, 7, &[
-            true, false, false, false, false, false, false,
-            false, true, false, false, false, false, false,
-            false, false, true, false, false, false, false,
-            false, false, false, true, false, false, false,
-            false, false, false, false, true, false, false,
-            false, false, false, false, false, true, false,
-            false, false, false, false, false, false, true,
-        ].iter().map(|x| MyBool::from(*x)).collect::<Vec<MyBool>>());
+        let expected_generated_matrix = DMatrix::from_row_slice(
+            7,
+            7,
+            &[
+                true, false, false, false, false, false, false, false, true, false, false, false,
+                false, false, false, false, true, false, false, false, false, false, false, false,
+                true, false, false, false, false, false, false, false, true, false, false, false,
+                false, false, false, false, true, false, false, false, false, false, false, false,
+                true,
+            ]
+            .iter()
+            .map(|x| MyBool::from(*x))
+            .collect::<Vec<MyBool>>(),
+        );
         assert_eq!(matrix, expected_generated_matrix);
     }
 }

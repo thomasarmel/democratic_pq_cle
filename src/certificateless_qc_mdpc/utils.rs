@@ -1,9 +1,11 @@
+use crate::my_bool::MyBool;
+use binary_polynomial_mod_algebra::{BinaryPolynomial, NonZeroBinaryPolynomial};
+use num::One;
+use num_bigint::BigUint;
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
 use sha3::{Digest, Sha3_512};
-use crate::binary_matrix_operations::{make_circulant_matrix, try_inverse_matrix};
-use crate::my_bool::MyBool;
 
 pub(super) fn generate_random_weight_vector(size: usize, weight: usize) -> Vec<MyBool> {
     let mut rng = ChaCha20Rng::from_entropy();
@@ -19,12 +21,22 @@ pub(super) fn generate_random_weight_vector(size: usize, weight: usize) -> Vec<M
     secret_vector
 }
 
-pub(super) fn check_vector_leads_to_invertible_circulant_matrix(vector: &[MyBool], p: usize) -> bool {
-    let circ = make_circulant_matrix(vector, p, p, 1);
-    try_inverse_matrix(&circ).is_some()
+pub(super) fn check_vector_leads_to_invertible_circulant_matrix(
+    vector: &[MyBool],
+    p: usize,
+) -> bool {
+    let poly_vec = NonZeroBinaryPolynomial::new(BinaryPolynomial::from(
+        vector.iter().map(|x| **x).rev().collect::<Vec<bool>>(),
+    ))
+    .unwrap();
+    let modulus = compute_polynomial_modulus(p);
+    poly_vec.inv_mod(&modulus).is_some()
 }
 
-pub fn generate_random_weight_vector_to_invertible_matrix(size: usize, weight: usize) -> Vec<MyBool> {
+pub fn generate_random_weight_vector_to_invertible_matrix(
+    size: usize,
+    weight: usize,
+) -> Vec<MyBool> {
     let mut vector = generate_random_weight_vector(size, weight);
     //vector.iter().for_each(|x| print!("{} ", x));
     //println!("");
@@ -33,14 +45,18 @@ pub fn generate_random_weight_vector_to_invertible_matrix(size: usize, weight: u
         println!("Regenerating vector");
         vector = generate_random_weight_vector(size, weight);
         while vector[(size >> 1)..size].iter().filter(|b| ***b).count() % 2 == 0 {
-            //println!("Regenerating vector bis");
+            println!("Regenerating vector bis");
             vector = generate_random_weight_vector(size, weight);
         }
     }
     vector
 }
 
-pub(super) fn generate_hash_id_vector_correct_weight(id: usize, k: usize, weight: usize) -> Vec<MyBool> {
+pub(super) fn generate_hash_id_vector_correct_weight(
+    id: usize,
+    k: usize,
+    weight: usize,
+) -> Vec<MyBool> {
     let mut hasher = Sha3_512::new();
     hasher.update(id.to_string());
     let h_id = hasher.finalize().as_slice().to_vec();
@@ -57,4 +73,36 @@ pub(super) fn generate_hash_id_vector_correct_weight(id: usize, k: usize, weight
         }
     }
     h_i_1
+}
+
+pub(super) fn try_invert_matrix_vector(matrix_first_line: &[MyBool]) -> Option<Vec<MyBool>> {
+    let matrix_size = matrix_first_line.len();
+    let modulus = compute_polynomial_modulus(matrix_size);
+    let polynomial = NonZeroBinaryPolynomial::new(BinaryPolynomial::from(
+        matrix_first_line.iter().map(|x| **x).rev().collect::<Vec<bool>>(),
+    ));
+    let inverse = polynomial.unwrap().inv_mod(&modulus)?;
+    let inverse_vector: Vec<bool> = inverse.into();
+    let result: Vec<MyBool> = inverse_vector.iter().map(|x| MyBool::from(*x)).rev().collect();
+    let result_len = result.len();
+    let result = [result, vec![MyBool::from(false); matrix_size - result_len]].concat();
+    Some(result)
+}
+
+pub(super) fn multiply_2_matrix_first_line_vector(first_line_matrix1: &[MyBool], first_line_matrix2: &[MyBool]) -> Vec<MyBool> {
+    assert_eq!(first_line_matrix1.len(), first_line_matrix2.len());
+    let matrix_size = first_line_matrix1.len();
+    let modulus = compute_polynomial_modulus(matrix_size);
+    let polynomial1 = BinaryPolynomial::from(first_line_matrix1.iter().map(|x| **x).rev().collect::<Vec<bool>>());
+    let polynomial2 = BinaryPolynomial::from(first_line_matrix2.iter().map(|x| **x).rev().collect::<Vec<bool>>());
+    let multiply_vec: Vec<bool> = polynomial1.mul_mod(&polynomial2, &modulus).unwrap().into();
+    let result: Vec<MyBool> = multiply_vec.iter().map(|x| MyBool::from(*x)).rev().collect();
+    let result_len = result.len();
+    [result, vec![MyBool::from(false); matrix_size - result_len]].concat()
+}
+
+fn compute_polynomial_modulus(matrix_size: usize) -> NonZeroBinaryPolynomial {
+    let mut modulus_biguint = BigUint::one();
+    modulus_biguint.set_bit(matrix_size as u64, true);
+    NonZeroBinaryPolynomial::new(BinaryPolynomial::from(modulus_biguint)).unwrap()
 }

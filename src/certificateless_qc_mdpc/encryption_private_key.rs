@@ -1,7 +1,7 @@
-use std::cmp::max;
-use nalgebra::DMatrix;
 use crate::binary_matrix_operations::matrix_is_zero;
 use crate::my_bool::MyBool;
+use nalgebra::DMatrix;
+use std::cmp::max;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CertificatelessQcMdpcPrivateKey {
@@ -25,16 +25,22 @@ impl CertificatelessQcMdpcPrivateKey {
             let mut unsatisfied = vec![0usize; encoded_data.ncols()];
             for j in 0..encoded_data.ncols() {
                 for k in 0..self.parity_check_matrix.nrows() {
-                    if **self.parity_check_matrix.get((k, j)).unwrap() && **syn.get((k, 0)).unwrap() {
+                    if **self.parity_check_matrix.get((k, j)).unwrap() && **syn.get((k, 0)).unwrap()
+                    {
                         unsatisfied[j] += 1;
                     }
                 }
             }
-            let b = max((*unsatisfied.iter().max().unwrap() as i32) - delta as i32, 0) as usize;
+            let b = max(
+                (*unsatisfied.iter().max().unwrap() as i32) - delta as i32,
+                0,
+            ) as usize;
             for j in 0..encoded_data.ncols() {
                 if unsatisfied[j] > b {
                     **(encoded_data.get_mut((0, j)).unwrap()) ^= true;
-                    syn += self.parity_check_matrix.view_range(0..self.parity_check_matrix.nrows(), j..j + 1);
+                    syn += self
+                        .parity_check_matrix
+                        .view_range(0..self.parity_check_matrix.nrows(), j..j + 1);
                 }
             }
 
@@ -65,16 +71,19 @@ impl CertificatelessQcMdpcPrivateKey {
             let mut unsatisfied = vec![0usize; ncols];
             for j in 0..ncols {
                 for k in 0..self.parity_check_matrix.nrows() {
-                    if **self.parity_check_matrix.get((k, j)).unwrap() && **syn.get((k, 0)).unwrap() {
+                    if **self.parity_check_matrix.get((k, j)).unwrap() && **syn.get((k, 0)).unwrap()
+                    {
                         unsatisfied[j] += 1;
                     }
                 }
             }
-            let b = (*unsatisfied.iter().max().unwrap()).abs_diff(delta);//max((*unsatisfied.iter().max().unwrap() as i32) - delta as i32, 0) as usize;
+            let b = (*unsatisfied.iter().max().unwrap()).abs_diff(delta); //max((*unsatisfied.iter().max().unwrap() as i32) - delta as i32, 0) as usize;
             for j in 0..ncols {
                 if unsatisfied[j] > b {
                     error[j] ^= true;
-                    syn += self.parity_check_matrix.view_range(0..self.parity_check_matrix.nrows(), j..j + 1);
+                    syn += self
+                        .parity_check_matrix
+                        .view_range(0..self.parity_check_matrix.nrows(), j..j + 1);
                 }
             }
 
@@ -88,7 +97,11 @@ impl CertificatelessQcMdpcPrivateKey {
     }
 
     pub fn weight(&self) -> usize {
-        self.parity_check_matrix.row(0).iter().filter(|b| ***b).count()
+        self.parity_check_matrix
+            .row(0)
+            .iter()
+            .filter(|b| ***b)
+            .count()
     }
 
     pub fn first_line(&self) -> Vec<MyBool> {
@@ -101,7 +114,11 @@ impl ToString for CertificatelessQcMdpcPrivateKey {
         let mut s = String::new();
         for i in 0..self.parity_check_matrix.nrows() {
             for j in 0..self.parity_check_matrix.ncols() {
-                s.push(if **self.parity_check_matrix.get((i, j)).unwrap() { '1' } else { '0' });
+                s.push(if **self.parity_check_matrix.get((i, j)).unwrap() {
+                    '1'
+                } else {
+                    '0'
+                });
             }
             s.push('\n');
         }

@@ -10,7 +10,10 @@ pub fn nth_combination(n: usize, k: usize, mut index: BigUint) -> Vec<usize> {
     }
     let mut combination = Vec::with_capacity(k);
     for i in 0..n {
-        let binomial = binomial(BigUint::from(n - i - 1), BigUint::from(k - combination.len() - 1));
+        let binomial = binomial(
+            BigUint::from(n - i - 1),
+            BigUint::from(k - combination.len() - 1),
+        );
         if index >= binomial {
             index -= binomial;
         } else {
@@ -25,15 +28,21 @@ pub fn nth_combination(n: usize, k: usize, mut index: BigUint) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use num::{One, Zero};
     use num_bigint::BigUint;
+    use std::str::FromStr;
 
     #[test]
     fn test_nth_combination() {
         assert_eq!(super::nth_combination(5, 3, BigUint::zero()), vec![0, 1, 2]);
         assert_eq!(super::nth_combination(5, 3, BigUint::one()), vec![0, 1, 3]);
-        assert_eq!(super::nth_combination(5, 3, BigUint::from(3usize)), vec![0, 2, 3]);
-        assert_eq!(super::nth_combination(401, 7, BigUint::from_str("148166658473837").unwrap()), vec![34, 103, 186, 203, 230, 275, 323]);
+        assert_eq!(
+            super::nth_combination(5, 3, BigUint::from(3usize)),
+            vec![0, 2, 3]
+        );
+        assert_eq!(
+            super::nth_combination(401, 7, BigUint::from_str("148166658473837").unwrap()),
+            vec![34, 103, 186, 203, 230, 275, 323]
+        );
     }
 }

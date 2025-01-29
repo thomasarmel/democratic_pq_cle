@@ -1,5 +1,5 @@
-use nalgebra::DMatrix;
 use crate::my_bool::MyBool;
+use nalgebra::DMatrix;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeWitnessSigPubKey {
