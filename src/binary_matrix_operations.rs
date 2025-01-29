@@ -167,6 +167,16 @@ mod tests {
         ]);
         let inverse = super::try_inverse_matrix(&matrix).unwrap();
         assert_eq!(matrix, inverse);
+
+        let matrix = DMatrix::from_row_slice(4, 4, &[
+            MyBool::from(true), MyBool::from(true), MyBool::from(false), MyBool::from(true),
+            MyBool::from(true), MyBool::from(true), MyBool::from(true), MyBool::from(false),
+            MyBool::from(false), MyBool::from(true), MyBool::from(true), MyBool::from(true),
+            MyBool::from(true), MyBool::from(false), MyBool::from(true), MyBool::from(true),
+        ]);
+        let inverse = super::try_inverse_matrix(&matrix).unwrap();
+        assert_eq!(matrix, inverse);
+        println!("{:?}", inverse);
     }
 
     #[test]
