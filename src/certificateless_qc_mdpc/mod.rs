@@ -15,16 +15,13 @@ use crate::certificateless_qc_mdpc::utils::{
     generate_random_weight_vector, generate_random_weight_vector_to_invertible_matrix,
 };
 use crate::certificateless_qc_mdpc::witness_signing_pub_key::NodeWitnessSigPubKey;
-use crate::math::nth_combination;
+use crate::math::{binom, nth_combination};
 use crate::my_bool::MyBool;
-use crate::N_0;
+use crate::{N_0, SIG_K};
 use nalgebra::DMatrix;
-use num::integer::{binomial, Roots};
-use num_bigint::{BigUint, RandBigInt};
+use num::integer::Roots;
+use num_bigint::RandBigInt;
 use crate::utils::{try_invert_matrix_vector, multiply_2_matrix_first_line_vector};
-
-const SIG_K: usize = 32; // must be changed when changing P
-const SIGNATURE_WEIGHT_INTERVAL: [usize; 2] = [90, 110];
 
 #[derive(Debug, Clone)]
 pub struct CertificatelessQcMdpc {
@@ -78,10 +75,8 @@ impl CertificatelessQcMdpc {
 
         let mut rng = rand::thread_rng();
         let j_comb_index =
-            rng.gen_biguint_below(&binomial(BigUint::from(p), BigUint::from(n_prime)));
-        let start = std::time::Instant::now();
+            rng.gen_biguint_below(&binom(p, n_prime));
         let j_comb = nth_combination(p, n_prime, j_comb_index);
-        println!("Comb generation time: {:?}", start.elapsed());
 
         Self {
             p,

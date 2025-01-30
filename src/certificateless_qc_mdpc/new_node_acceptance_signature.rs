@@ -1,10 +1,11 @@
 use crate::certificateless_qc_mdpc::{
-    generate_hash_id_vector_correct_weight, NodeWitnessSigPubKey, SIGNATURE_WEIGHT_INTERVAL, SIG_K,
+    generate_hash_id_vector_correct_weight, NodeWitnessSigPubKey,
 };
 use crate::my_bool::MyBool;
 use nalgebra::DMatrix;
 use num::{One, Zero};
 use num_bigint::BigInt;
+use crate::{SIGNATURE_WEIGHT_INTERVAL, SIG_K};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewNodeAcceptanceSignature {

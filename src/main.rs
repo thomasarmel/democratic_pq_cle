@@ -1,29 +1,27 @@
 use std::str::FromStr;
 use democratic_pq_cle::certificateless_qc_mdpc::CertificatelessQcMdpc;
-use democratic_pq_cle::math::nth_combination;
+use democratic_pq_cle::math::{binom, nth_combination};
 use democratic_pq_cle::my_bool::MyBool;
 use democratic_pq_cle::utils::generate_random_weight_vector_to_invertible_matrix;
-use num::integer::{binomial, Roots};
+use num::integer::Roots;
 use num::Integer;
-use num_bigint::{BigInt, BigUint, ToBigInt};
+use num_bigint::{BigUint, ToBigInt};
 use verifiable_secret_sharing::ShamirSecretSharing as SSS;
-
-const P: usize = 401;
-const W: usize = 100;
-const T: usize = 5; // errors count, to be determined
-const VOTES_THRESHOLD: f32 = 0.66;
+use democratic_pq_cle::{P, T, VOTES_THRESHOLD, W};
 
 const MESSAGE: &'static str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX";
-// Warning: Must regenerate prime when increasing P
+// Warning: Must regenerate prime when increasing P: size = P << 2 ??
 const SHAMIR_PRIME: &'static str = "160709158425158035654685227325973365624663273287406113461145953791824931969868553857443975598081782425782238924631575521690050079686432679571207930665013242855292363190357607432848330361342045009708758970141017149750410159672120775535180892519552660606472653252094488915011087690901235041024920903936951266492676478477152395959987044121055694487824454548513291118740413831170656966083481545846322276907730288640437837123252820411487356601254412916684662133890553145125006204300890659";
 
 fn main() {
+    /*let prime = Generator::new_prime(P << 2);
+    println!("{}", prime);*/
     let shamir_prime = BigUint::from_str(SHAMIR_PRIME).unwrap();
     let shamir_prime = shamir_prime.to_bigint().unwrap();
 
     //let si_weight = max((W >> 1).nth_root(3), 10); // ???
     let si_weight = (W >> 1).nth_root(2); //7;//(W >> 1).nth_root(3); // TODO il faudrait au moins 7 pour securité, 13 pour P = 4000
-    let binomial_coef_s_i_generation = binomial(BigInt::from(P), BigInt::from(si_weight));
+    let binomial_coef_s_i_generation = binom(P, si_weight).to_bigint().unwrap();
 
     let mut nodes_currently_in_system_count = 0;
 

@@ -1,19 +1,18 @@
-use num::integer::binomial;
+use num::One;
 use num_bigint::BigUint;
 
 pub fn nth_combination(n: usize, k: usize, mut index: BigUint) -> Vec<usize> {
+    //println!("{} {} {}", n, k, index);
+    //return vec![0; k];
     if k > n {
         panic!("k must be less than or equal to n");
     }
-    if index >= binomial(BigUint::from(n), BigUint::from(k)) {
+    if index >= binom(n, k) {
         panic!("index must be less than the number of combinations");
     }
     let mut combination = Vec::with_capacity(k);
     for i in 0..n {
-        let binomial = binomial(
-            BigUint::from(n - i - 1),
-            BigUint::from(k - combination.len() - 1),
-        );
+        let binomial = binom(n - i - 1, k - combination.len() - 1);
         if index >= binomial {
             index -= binomial;
         } else {
@@ -25,6 +24,16 @@ pub fn nth_combination(n: usize, k: usize, mut index: BigUint) -> Vec<usize> {
     }
     combination
 }
+
+pub fn binom(n: usize, k: usize) -> BigUint {
+    let mut res = BigUint::one();
+    for i in 0..k {
+        res = (res * BigUint::from(n - i)) /
+            BigUint::from(i + 1);
+    }
+    res
+}
+
 
 #[cfg(test)]
 mod tests {

@@ -23,7 +23,7 @@ pub struct CertificatelessQcMdpcPublicKey {
 
 impl CertificatelessQcMdpcPublicKey {
     #[allow(non_snake_case)]
-    pub fn encrypt(&self, data: &[u8]) -> DMatrix<MyBool> {
+    pub fn encrypt(&self, data: &[u8]) -> DMatrix<MyBool> { // TODO: until decryption works
         assert!(data.len() << 3 <= self.max_message_size_bits);
         let mut message = DMatrix::from_element(1, self.max_message_size_bits, MyBool::from(false));
         for i in 0..min(self.max_message_size_bits, data.len() << 3) {
