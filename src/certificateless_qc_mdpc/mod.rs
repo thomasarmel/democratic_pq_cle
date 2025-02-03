@@ -17,7 +17,7 @@ use crate::certificateless_qc_mdpc::utils::{
 use crate::certificateless_qc_mdpc::witness_signing_pub_key::NodeWitnessSigPubKey;
 use crate::math::{binom, nth_combination};
 use crate::my_bool::MyBool;
-use crate::{N_0, SIG_K};
+use crate::{N_0, SIG_K, SIG_N, SIG_N_PRIME, SIG_R};
 use nalgebra::DMatrix;
 use num::integer::Roots;
 use num_bigint::RandBigInt;
@@ -60,23 +60,22 @@ impl CertificatelessQcMdpc {
         //println!("h_i_3: {:?}", h_i_3);
 
         let sig_a = make_circulant_matrix(
-            &generate_random_weight_vector(SIG_K, SIG_K >> 1),
+            &generate_random_weight_vector_to_invertible_matrix(SIG_K, SIG_K.nth_root(3)),
             SIG_K,
             SIG_K,
             1,
         );
         let mut sig_g = make_identity_matrix(SIG_K);
-        let n_prime = p >> 1;
-        let b = generate_random_weight_vector(n_prime - SIG_K, SIG_K);
-        let B = make_circulant_matrix(&b, SIG_K, n_prime - SIG_K, 1);
+        let b = generate_random_weight_vector(SIG_N_PRIME - SIG_K, SIG_K);
+        let B = make_circulant_matrix(&b, SIG_K, SIG_N_PRIME - SIG_K, 1);
         concat_horizontally_mat(&mut sig_g, &B);
 
         let sig_sk_generator = sig_a * sig_g;
 
         let mut rng = rand::thread_rng();
         let j_comb_index =
-            rng.gen_biguint_below(&binom(p, n_prime));
-        let j_comb = nth_combination(p, n_prime, j_comb_index);
+            rng.gen_biguint_below(&binom(SIG_N, SIG_N_PRIME));
+        let j_comb = nth_combination(SIG_N, SIG_N_PRIME, j_comb_index);
 
         Self {
             p,
@@ -108,15 +107,13 @@ impl CertificatelessQcMdpc {
         let mut generator = make_identity_matrix(self.p);
         concat_horizontally_mat(&mut generator, &right_part_generator);
 
-        let n_prime = self.p >> 1;
-        let r = self.p >> 1;
-        let mut signature_parity_matrix = make_identity_matrix(r);
-        let R_i_truncated: DMatrix<MyBool> = R_i.columns(0, self.p - r).into();
-        let R_i_truncated: DMatrix<MyBool> = R_i_truncated.rows(0, r).into();
+        let mut signature_parity_matrix = make_identity_matrix(SIG_R);
+        let R_i_truncated: DMatrix<MyBool> = R_i.columns(0, SIG_N - SIG_R).into();
+        let R_i_truncated: DMatrix<MyBool> = R_i_truncated.rows(0, SIG_R).into();
         concat_horizontally_mat(&mut signature_parity_matrix, &R_i_truncated);
 
         let mut signature_parity_matrix_truncated =
-            DMatrix::from_element(r, n_prime, MyBool::from(false));
+            DMatrix::from_element(SIG_R, SIG_N_PRIME, MyBool::from(false));
         for col_num in 0..signature_parity_matrix_truncated.ncols() {
             signature_parity_matrix_truncated.set_column(
                 col_num,
@@ -159,7 +156,7 @@ impl CertificatelessQcMdpc {
     pub fn accept_new_node(&self, new_node_id: usize) -> NewNodeAcceptanceSignature {
         // Returns Shamir's share
         let mut generator_star: DMatrix<MyBool> =
-            DMatrix::from_element(SIG_K, self.p, MyBool::from(false));
+            DMatrix::from_element(SIG_K, SIG_N, MyBool::from(false));
         for row in 0..generator_star.nrows() {
             for col in 0..generator_star.ncols() {
                 let current_col_pos_in_sig_j = self.sig_j.iter().position(|&c| c == col);

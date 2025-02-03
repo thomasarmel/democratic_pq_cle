@@ -6,7 +6,10 @@ pub use crate::certificateless_qc_mdpc::utils;
 pub const N_0: usize = 2;
 
 const SIG_K: usize = 160; // must be changed when changing P
-const SIGNATURE_WEIGHT_INTERVAL: [usize; 2] = [900, 1100];
+const SIG_N: usize = 2000;
+const SIG_N_PRIME: usize = 1000;
+const SIG_R: usize = 1100;
+const SIGNATURE_WEIGHT_INTERVAL: [usize; 2] = [450, 550];
 pub const P: usize = 4001;
 pub const W: usize = 127;
 pub const T: usize = 50; // errors count, to be determined
