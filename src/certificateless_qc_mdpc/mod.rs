@@ -66,7 +66,7 @@ impl CertificatelessQcMdpc {
             1,
         );
         let mut sig_g = make_identity_matrix(SIG_K);
-        let b = generate_random_weight_vector(SIG_N_PRIME - SIG_K, SIG_K);
+        let b = generate_random_weight_vector(SIG_N_PRIME - SIG_K, (SIG_N_PRIME - SIG_K) >> 1);
         let B = make_circulant_matrix(&b, SIG_K, SIG_N_PRIME - SIG_K, 1);
         concat_horizontally_mat(&mut sig_g, &B);
 
@@ -157,9 +157,9 @@ impl CertificatelessQcMdpc {
         // Returns Shamir's share
         let mut generator_star: DMatrix<MyBool> =
             DMatrix::from_element(SIG_K, SIG_N, MyBool::from(false));
-        for row in 0..generator_star.nrows() {
-            for col in 0..generator_star.ncols() {
-                let current_col_pos_in_sig_j = self.sig_j.iter().position(|&c| c == col);
+        for col in 0..generator_star.ncols() {
+            let current_col_pos_in_sig_j = self.sig_j.iter().position(|&c| c == col);
+            for row in 0..generator_star.nrows() {
                 match current_col_pos_in_sig_j {
                     None => {}
                     Some(col_pos) => {
@@ -170,9 +170,10 @@ impl CertificatelessQcMdpc {
         }
         let h_other_1 = generate_hash_id_vector_correct_weight(new_node_id, SIG_K, SIG_K >> 1);
         let H_other_1: DMatrix<MyBool> = DMatrix::from_column_slice(1, SIG_K, &h_other_1);
+        let signature = H_other_1 * generator_star;
 
         NewNodeAcceptanceSignature {
-            signature: H_other_1 * generator_star,
+            signature,
             signing_node_id: self.node_id,
         }
     }
