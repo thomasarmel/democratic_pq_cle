@@ -11,6 +11,6 @@ const SIG_N_PRIME: usize = 1000;
 const SIG_R: usize = 1100;
 const SIGNATURE_WEIGHT_INTERVAL: [usize; 2] = [470, 530];
 pub const P: usize = 4001;
-pub const W: usize = 127;
+pub const W: usize = 100;
 pub const T: usize = 50; // errors count, to be determined
 pub const VOTES_THRESHOLD: f32 = 0.66;
