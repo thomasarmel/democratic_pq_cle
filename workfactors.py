@@ -1,15 +1,15 @@
 import math
 
 
-n = 8002 # Code size
-p = 4001 # Code dimension
+n = 16042 # Code size
+p = 8021 # Code dimension
 t = 50 # Error count
 
 # l, p, e1, e2 computed using https://link.springer.com/chapter/10.1007/978-3-642-29011-4_31
-l = int(0.0322796 * n)
-psi = int(0.00624922 * n)
-e1 = int(0.000636502 * n)
-e2 = int(0.00000663617 * n)
+l = int(0.01722 * n)
+psi = int(0.00311681 * n)
+e1 = int(0.000232741 * n)
+e2 = int(0.0000013983 * n)
 
 psi1 = (psi // 2) + e1
 psi2 = (psi1 // 2) + e2

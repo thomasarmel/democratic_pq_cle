@@ -20,8 +20,7 @@ fn main() {
     let shamir_prime = BigUint::from_str(SHAMIR_PRIME).unwrap();
     let shamir_prime = shamir_prime.to_bigint().unwrap();
 
-    //let si_weight = max((W >> 1).nth_root(3), 10); // ???
-    let si_weight = (W >> 1).nth_root(2); //7;//(W >> 1).nth_root(3); // TODO il faudrait au moins 7 pour securité, 13 pour P = 4000
+    let si_weight = (W >> 1).nth_root(2);
     let binomial_coef_s_i_generation = binom(P, si_weight).to_bigint().unwrap();
 
     let mut nodes_currently_in_system_count = 0;
@@ -29,7 +28,6 @@ fn main() {
     // Init node 1, using a random s_i vector
 
     let s_i_node_1 = generate_random_weight_vector_to_invertible_matrix(P, si_weight);
-    //println!("s_i: {:?}", s_i_node_1);
     let node_1 = CertificatelessQcMdpc::init(1, P, W, T, &s_i_node_1);
 
     nodes_currently_in_system_count += 1;
@@ -40,8 +38,6 @@ fn main() {
     );
 
     let node_1_private_key = node_1.private_key();
-    //println!("{}", node_1_private_key.first_line().iter().map(|x| if **x { '1' } else { '0' }).collect::<String>());
-    //println!("{}", node_1_private_key.weight());
     let encrypted = node_1_public_key.encrypt(MESSAGE.as_bytes());
     println!(
         "Encrypted: {}",
@@ -50,19 +46,10 @@ fn main() {
             .map(|x| if **x { '1' } else { '0' })
             .collect::<String>()
     );
-    //std::fs::write("H.txt", node_1_private_key.to_string()).expect("Unable to write file");
-    //std::fs::write("enc.txt", encrypted.iter().map(|x| if **x { '1' } else { '0' }).collect::<String>()).expect("Unable to write file");
-    //println!("{} {}", encrypted.nrows(), encrypted.ncols());
-    let encrypted_bis = node_1_public_key.encrypt(MESSAGE.as_bytes()); // as decryption is probabilist, it increases the chance to decrypt the message
-                                                                       //std::fs::write("enc2.txt", encrypted_bis.iter().map(|x| if **x { '1' } else { '0' }).collect::<String>()).expect("Unable to write file");
-                                                                       //println!("Encrypted: {}", encrypted);
-                                                                       //return;
 
     let decrypted = node_1_private_key
         .decrypt(&encrypted)
-        .or(node_1_private_key.decrypt(&encrypted_bis))
         .unwrap();
-    //println!("Decrypted: {:?}", decrypted);
     println!(
         "Node 1: Decrypted data: {}",
         std::str::from_utf8(&decrypted[0..MESSAGE.len()]).unwrap()
@@ -76,7 +63,6 @@ fn main() {
         "New node 2 signature valid from node 1: {}",
         new_node_2_signature_from_node_1.is_valid(&node_1_witness, 2)
     );
-    //return;
 
     let shamir_voting_threshold =
         ((nodes_currently_in_system_count as f32) * VOTES_THRESHOLD).ceil() as usize;
@@ -89,12 +75,9 @@ fn main() {
         share_amount: 1,
         prime: shamir_prime.clone(),
     };
-    //println!("{}", new_node_2_signature.to_shamir_share(1).1);
-    //println!("{}", sss.recover(&[new_node_2_signature.to_shamir_share(1)]));
     let s_node_2_combination_index = sss
         .recover(&[new_node_2_signature_from_node_1.to_shamir_share()])
         .mod_floor(&binomial_coef_s_i_generation);
-    //println!("{}", s_node_2_combination_index);
     let mut s_i_node_2 = vec![MyBool::from(false); P];
     for index_to_flip in nth_combination(
         P,
@@ -103,7 +86,6 @@ fn main() {
     ) {
         s_i_node_2[index_to_flip] = MyBool::from(true);
     }
-    //println!("s_i_node_2: {:?}", s_i_node_2);
     let node_2 = CertificatelessQcMdpc::init(2, P, W, T, &s_i_node_2);
     nodes_currently_in_system_count += 1;
     let (node_2_public_key, node_2_witness) = node_2.public_key_and_witness();
@@ -113,16 +95,11 @@ fn main() {
     );
 
     let node_2_private_key = node_2.private_key();
-    //println!("Public key: {:?}", public_key);
     let encrypted = node_2_public_key.encrypt(MESSAGE.as_bytes());
-    let encrypted_bis = node_2_public_key.encrypt(MESSAGE.as_bytes()); // as decryption is probabilist, it increases the chance to decrypt the message
-                                                                       //println!("Encrypted: {}", encrypted);
 
     let decrypted = node_2_private_key
         .decrypt(&encrypted)
-        .or(node_2_private_key.decrypt(&encrypted_bis))
         .unwrap();
-    //println!("Decrypted: {:?}", decrypted);
     println!(
         "Node 2: Decrypted data: {}",
         std::str::from_utf8(&decrypted[0..MESSAGE.len()]).unwrap()
@@ -174,12 +151,9 @@ fn main() {
     );
     let node_3_private_key = node_3.private_key();
     let encrypted = node_3_public_key.encrypt(MESSAGE.as_bytes());
-    let encrypted_bis = node_3_public_key.encrypt(MESSAGE.as_bytes()); // as decryption is probabilist, it increases the chance to decrypt the message
     let decrypted = node_3_private_key
         .decrypt(&encrypted)
-        .or(node_3_private_key.decrypt(&encrypted_bis))
         .unwrap();
-    //println!("Decrypted: {:?}", decrypted);
     println!(
         "Node 3: Decrypted data: {}",
         std::str::from_utf8(&decrypted[0..MESSAGE.len()]).unwrap()
