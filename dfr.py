@@ -20,7 +20,7 @@ proba_f = scipy.stats.binom(p, nrho)
 
 total_dfr = 0.0
 
-for line in open("weight_50.txt"):
+for line in open("weight_50.txt"): # Decoding failure rate for all syndrome weights and t = 50 https://github.com/vvasseur/qcmdpc_markov
     sline = line.split()
     error_count = int(sline[0])
     assert error_count == t
