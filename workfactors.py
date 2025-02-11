@@ -1,8 +1,8 @@
 import math
 
 
-n = 16042 # Code size
-p = 8021 # Code dimension
+n = 16018 # Code size
+p = 8009 # Code dimension
 t = 50 # Error count
 
 # l, p, e1, e2 computed using https://link.springer.com/chapter/10.1007/978-3-642-29011-4_31
