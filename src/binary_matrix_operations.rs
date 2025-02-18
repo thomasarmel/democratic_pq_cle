@@ -1,6 +1,7 @@
 use crate::my_bool::MyBool;
 use nalgebra::DMatrix;
 
+#[allow(dead_code)]
 fn matrix_is_identity(matrix: &DMatrix<MyBool>) -> bool {
     if matrix.nrows() != matrix.ncols() {
         return false;
@@ -50,6 +51,7 @@ pub(crate) fn make_identity_matrix(size: usize) -> DMatrix<MyBool> {
     matrix
 }
 
+#[allow(dead_code)]
 pub(crate) fn try_inverse_matrix(matrix: &DMatrix<MyBool>) -> Option<DMatrix<MyBool>> {
     if matrix.nrows() != matrix.ncols() {
         return None;
@@ -114,6 +116,7 @@ pub(crate) fn concat_horizontally_mat(original: &mut DMatrix<MyBool>, to_add: &D
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn concat_vertically_mat(original: &mut DMatrix<MyBool>, to_add: &DMatrix<MyBool>) {
     if original.ncols() != to_add.ncols() {
         panic!("The number of columns must be the same");
